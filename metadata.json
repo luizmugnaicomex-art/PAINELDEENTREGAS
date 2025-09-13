@@ -1,0 +1,5 @@
+{
+  "name": "Programação de Entregas - CNTRS",
+  "description": "A tool to manage and track container delivery schedules from an Excel file.",
+  "requestFramePermissions": []
+}
