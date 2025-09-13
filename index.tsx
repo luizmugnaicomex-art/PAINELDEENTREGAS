@@ -1,3 +1,4 @@
+declare const firebase: any;
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
