@@ -1,4 +1,6 @@
+// NOVO: Aviso para o TypeScript sobre a variável global do Firebase
 declare const firebase: any;
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -7,6 +9,20 @@ declare const firebase: any;
 // --- Type definitions for CDN libraries to inform TypeScript ---
 declare const XLSX: any;
 declare const jspdf: any;
+
+// NOVO: Bloco de configuração e inicialização do Firebase
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 
 // --- DOM Elements ---
 const fileUpload = document.getElementById('file-upload') as HTMLInputElement;
@@ -110,6 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setTheme(initialTheme);
     // Load company logo if it exists
     loadLogoFromStorage();
+    // NOVO: Inicia o "ouvinte" de dados em tempo real do Firebase
+    escutarMudancasEmTempoReal();
 });
 
 
@@ -117,7 +135,59 @@ document.addEventListener('DOMContentLoaded', () => {
 let deliveryData: any[] = [];
 let searchDebounceTimer: number;
 let activeStatusFilter: string | null = null;
+let isUpdatingFromFirebase = false; // NOVO: Flag para evitar loops de salvamento
 
+// --- Firebase Integration ---
+async function salvarDados(listaDeEntregas: any[]) {
+    if (isUpdatingFromFirebase) {
+        console.log("Atualização do Firebase em andamento, salvamento ignorado para evitar loop.");
+        return;
+    }
+    console.log("Tentando salvar dados no Firebase...");
+    try {
+      await db.collection("painel").doc("entregas_atuais").set({
+        dados: listaDeEntregas,
+        ultimaAtualizacao: new Date()
+      });
+      console.log("Dados salvos com sucesso no Firebase!");
+    } catch (error) {
+      console.error("Erro ao salvar dados no Firebase: ", error);
+      showToast("Falha ao sincronizar dados com o servidor.", "error");
+    }
+}
+
+function escutarMudancasEmTempoReal() {
+    console.log("Iniciando ouvinte de dados do Firebase...");
+    db.collection("painel").doc("entregas_atuais").onSnapshot(doc => {
+        isUpdatingFromFirebase = true; // Ativa a flag
+        console.log("Dados recebidos do Firebase!");
+        if (doc.exists) {
+            const data = doc.data();
+            if (data && data.dados) {
+                deliveryData = data.dados; // Atualiza a variável global
+                const ultimaAtualizacao = data.ultimaAtualizacao?.toDate();
+
+                // Mantém o filtro ativo após a atualização
+                const activeTab = deliveryTabs.querySelector('.tab-btn.active') as HTMLButtonElement;
+                const activeTabId = activeTab ? activeTab.dataset.target : null;
+
+                applyFiltersAndRender(activeTabId);
+                
+                if (ultimaAtualizacao) {
+                    lastUpdate.textContent = `Dados sincronizados | Última alteração em: ${ultimaAtualizacao.toLocaleString('pt-BR')}`;
+                }
+            }
+        } else {
+            console.log("Nenhum documento de entregas no Firebase. Aguardando upload.");
+            resetUI();
+        }
+        // Libera a flag após um pequeno delay para garantir que a renderização termine
+        setTimeout(() => { isUpdatingFromFirebase = false; }, 500);
+    }, error => {
+        console.error("Erro no ouvinte do Firebase: ", error);
+        showToast("Conexão com o servidor perdida. Verifique sua internet.", "error");
+    });
+}
 
 // --- Confirmation Modal ---
 function showConfirmationDialog(title: string, message: string): Promise<boolean> {
@@ -234,22 +304,24 @@ fileUpload.addEventListener('change', (event) => {
 
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => { // MODIFICADO: para async
         try {
             if (!e.target?.result) throw new Error("Falha ao ler o arquivo.");
             const workbook = XLSX.read(new Uint8Array(e.target.result as ArrayBuffer), { type: 'array' });
             const deliverySheetName = findDeliverySheet(workbook);
             
-            deliveryData = XLSX.utils.sheet_to_json(workbook.Sheets[deliverySheetName], { raw: false, defval: '' });
-            if (deliveryData.length === 0) throw new Error("A planilha de agendamento está vazia.");
+            const dataFromSheet = XLSX.utils.sheet_to_json(workbook.Sheets[deliverySheetName], { raw: false, defval: '' });
+            if (dataFromSheet.length === 0) throw new Error("A planilha de agendamento está vazia.");
             
-            // Clear all filters on new upload
+            // NOVO: Salva os novos dados no Firebase. O ouvinte em tempo real cuidará da atualização da tela.
+            await salvarDados(dataFromSheet);
+
+            showToast('Planilha enviada com sucesso! Atualizando para todos...', 'success');
+            
+            // Limpa filtros para a nova visualização
             searchInput.value = ''; 
             activeStatusFilter = null;
-            applyFiltersAndRender();
             
-            lastUpdate.textContent = `Dados de "${deliverySheetName}" | Carregado em: ${new Date().toLocaleString('pt-BR')}`;
-            showToast('Planilha de entregas carregada!', 'success');
         } catch (err: any) {
             showToast(err.message || 'Erro ao processar arquivo.', 'error');
             resetUI();
@@ -666,10 +738,6 @@ deliveryContent.addEventListener('change', async (event) => {
     
     if (isNaN(originalIndex) || !deliveryData[originalIndex]) return;
 
-    // --- BUG FIX: Remember active tab before re-render ---
-    const activeTab = deliveryTabs.querySelector('.tab-btn.active') as HTMLButtonElement;
-    const activeTabId = activeTab ? activeTab.dataset.target : null;
-
     const originalStatus = deliveryData[originalIndex]['STATUS'] || 'PENDENTE';
     const containerID = deliveryData[originalIndex]['CONTAINER'] || 'Este item';
     const isTerminalState = newStatus === 'ENTREGUE' || newStatus === 'CANCELADO';
@@ -690,7 +758,8 @@ deliveryContent.addEventListener('change', async (event) => {
     const statusText = newStatus.charAt(0) + newStatus.slice(1).toLowerCase();
     showToast(`Container ${containerID} atualizado para ${statusText}!`, 'success');
     
-    applyFiltersAndRender(activeTabId); // Pass the active tab ID to restore it
+    // NOVO: Salva o estado completo no Firebase após a mudança
+    await salvarDados(deliveryData);
 });
 
 function escapeAttr(str: string): string {
@@ -784,8 +853,8 @@ deliveryContent.addEventListener('input', (event) => {
     }
 });
 
-// Listener to save inline edits on blur
-deliveryContent.addEventListener('blur', (event) => {
+// MODIFICADO: para ser 'async'
+deliveryContent.addEventListener('blur', async (event) => {
     const target = event.target as HTMLInputElement | HTMLTextAreaElement;
     if (!target.matches('.editable-input, .editable-textarea') || !target.classList.contains('is-dirty')) {
         return;
@@ -807,6 +876,11 @@ deliveryContent.addEventListener('blur', (event) => {
     showToast(`Campo "${field.replace(/_/g, ' ')}" atualizado.`, 'success');
     target.classList.remove('is-dirty');
 
+    // NOVO: Salva o estado completo no Firebase após a mudança
+    await salvarDados(deliveryData);
+
+    // MODIFICADO: A atualização da UI agora é controlada pelo ouvinte do Firebase,
+    // mas podemos forçar uma atualização visual imediata se necessário.
     if (field === 'BONDED WAREHOUSE') {
         const tableRow = document.querySelector<HTMLTableRowElement>(`tr[data-original-index="${originalIndex}"]`);
         if (tableRow && tableRow.cells[4]) {
