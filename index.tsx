@@ -1,29 +1,11 @@
-// NOVO: Aviso para o TypeScript sobre a variável global do Firebase
-declare const firebase: any;
-
+// @ts-nocheck
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 
-// --- Type definitions for CDN libraries to inform TypeScript ---
-declare const XLSX: any;
-declare const jspdf: any;
-
-// NOVO: Bloco de configuração e inicialização do Firebase
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-// @ts-nocheck
-// Since we are using browser globals, we can disable TypeScript checks for them.
+// --- Type definitions for CDN libraries ---
+declare const firebase: any;
 declare const XLSX: any;
 declare const Chart: any;
 declare const jspdf: any;
@@ -32,9 +14,22 @@ declare const ChartDataLabels: any;
 
 import { GoogleGenAI } from "@google/genai";
 
+// --- FIREBASE INITIALIZATION ---
+const firebaseConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 // --- TYPE DEFINITIONS ---
 interface ContainerData {
-    [key:string]: any;
+    [key: string]: any;
     'PO': string;
     'Vessel': string;
     'Container': string;
@@ -414,6 +409,78 @@ const listModal = document.getElementById('list-modal') as HTMLDivElement;
 const ratesModal = document.getElementById('rates-modal') as HTMLDivElement;
 const aiModal = document.getElementById('ai-modal') as HTMLDivElement;
 
+// --- FIREBASE INTEGRATION ---
+let isUpdatingFromFirebase = false; // Flag to prevent write loops
+
+// Saves the entire application state to Firebase
+async function saveStateToFirebase() {
+    if (isUpdatingFromFirebase) {
+        console.log("Firebase update in progress, skipping save to prevent loop.");
+        return;
+    }
+    try {
+        const stateToSave = {
+            allData: appState.allData,
+            demurrageRates: appState.demurrageRates,
+            paidStatuses: appState.paidStatuses,
+            lastUpdate: new Date(),
+            lastUpdateFileName: lastUpdateEl.dataset.fileName || 'N/A'
+        };
+        await db.collection("demurrage_dashboard").doc("live_data").set(stateToSave);
+        console.log("State saved to Firebase.");
+    } catch (error) {
+        console.error("Error saving state to Firebase: ", error);
+        showToast("Failed to sync changes with the server.", "error");
+    }
+}
+
+// Listens for real-time updates from Firebase
+function listenForRealtimeUpdates() {
+    db.collection("demurrage_dashboard").doc("live_data").onSnapshot(doc => {
+        isUpdatingFromFirebase = true;
+        console.log("Received update from Firebase.");
+        loadingOverlay.classList.remove('hidden');
+
+        if (doc.exists) {
+            const data = doc.data();
+
+            // Re-hydrate date objects from Firestore Timestamps
+            appState.allData = (data.allData || []).map(d => ({
+                ...d,
+                'Discharge Date': d['Discharge Date'] ? d['Discharge Date'].toDate() : null,
+                'End of Free Time': d['End of Free Time'] ? d['End of Free Time'].toDate() : new Date(),
+                'Return Date': d['Return Date'] ? d['Return Date'].toDate() : undefined,
+            }));
+
+            appState.demurrageRates = data.demurrageRates || { default: 100 };
+            appState.paidStatuses = data.paidStatuses || {};
+            appState.filteredData = appState.allData; // Reset filters to show all data from new state
+            
+            const lastUpdateDate = data.lastUpdate?.toDate();
+            if (lastUpdateDate) {
+                 updateLastUpdate(data.lastUpdateFileName, lastUpdateDate);
+            }
+            
+            renderDashboard();
+
+        } else {
+            console.log("No live data found in Firebase. Resetting UI.");
+            resetToInitialState();
+        }
+        
+        // Release the flag after a short delay to allow UI to render
+        setTimeout(() => { 
+            isUpdatingFromFirebase = false; 
+            loadingOverlay.classList.add('hidden');
+        }, 500);
+
+    }, error => {
+        console.error("Firebase listener error: ", error);
+        showToast("Connection to the server was lost. Please check your internet.", "error");
+        loadingOverlay.classList.add('hidden');
+    });
+}
+
 // --- UTILITY FUNCTIONS ---
 const formatDate = (date: Date | null | undefined, locale = appState.currentLanguage): string => {
     if (!date) return 'N/A';
@@ -421,7 +488,7 @@ const formatDate = (date: Date | null | undefined, locale = appState.currentLang
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
-        timeZone: 'UTC' // Display date in UTC to avoid off-by-one day errors
+        timeZone: 'UTC'
     });
 };
 
@@ -457,7 +524,7 @@ function parseDate(dateInput: any): Date {
     }
     if (typeof dateInput === 'string') {
         const isoMatch = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (isoMatch) return new Date(dateInput); // ISO strings are parsed as UTC
+        if (isoMatch) return new Date(dateInput);
 
         const parts = dateInput.split(/[/.-]/);
         if (parts.length === 3) {
@@ -467,12 +534,10 @@ function parseDate(dateInput: any): Date {
             if (year < 100) year += 2000;
 
             if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                // Create a date in UTC to avoid timezone issues. Month is 1-based, JS Date is 0-based.
                 return new Date(Date.UTC(year, month - 1, day));
             }
         }
     }
-    // Excel's date serial number (days since 1900-01-01). This formula gives UTC milliseconds.
     if (typeof dateInput === 'number' && dateInput > 0) {
         return new Date(Math.round((dateInput - 25569) * 86400 * 1000));
     }
@@ -507,7 +572,7 @@ function processData(data: any[]): ContainerData[] {
                     endOfFreeTime.setUTCDate(dischargeDate.getUTCDate() + freeDays);
                 } else {
                     console.error(`Skipping row, cannot determine end of free time for container ${row.Container}`);
-                    return null; // Skip if no end date can be found
+                    return null;
                 }
                 
                 let hasDateError = false;
@@ -517,7 +582,6 @@ function processData(data: any[]): ContainerData[] {
                     hasDateError = true;
                 }
 
-                // Determine Return Date based on Status
                 const statusDepot = String(row['Status Depot'] || '').trim().toUpperCase();
                 const actualReturnDateValue = row['Return Date'];
                 let returnDate: Date | undefined = undefined;
@@ -545,7 +609,7 @@ function processData(data: any[]): ContainerData[] {
                 const shipowner = String(row['Shipowner'] || 'DEFAULT').trim().toUpperCase();
                 const rate = appState.demurrageRates[shipowner] || appState.demurrageRates.default;
                 const demurrageCost = demurrageDays * rate;
-                 
+                
                 return {
                     'PO': String(row['PO'] || ''),
                     'Vessel': String(row['Vessel'] || ''),
@@ -564,7 +628,6 @@ function processData(data: any[]): ContainerData[] {
                 };
 
             } catch (error) {
-                // Silently log the error and skip the row.
                 console.error(`Error processing row for container ${row.Container}:`, error);
                 return null;
             }
@@ -574,7 +637,7 @@ function processData(data: any[]): ContainerData[] {
     return processed;
 }
 
-const handleFileUpload = (event: Event) => {
+const handleFileUpload = async (event: Event) => {
     loadingOverlay.classList.remove('hidden');
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) {
@@ -583,17 +646,16 @@ const handleFileUpload = (event: Event) => {
     }
 
     const reader = new FileReader();
-    reader.onload = (e: ProgressEvent<FileReader>) => {
+    reader.onload = async (e: ProgressEvent<FileReader>) => {
         try {
             const data = e.target?.result;
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const sheet = workbook.Sheets[sheetName];
-            // Use header:1 to get an array of arrays, easier to map headers this way
             const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
             if (jsonData.length < 2) {
-                 throw new Error("Spreadsheet is empty or has no data rows.");
+                throw new Error("Spreadsheet is empty or has no data rows.");
             }
 
             const headers: string[] = jsonData[0];
@@ -614,7 +676,6 @@ const handleFileUpload = (event: Event) => {
                 'STATUS': 'Status Depot'
             };
             
-            // Create a map from the actual header name in the file to our target key
             const headerMap: {[key: string]: string} = {};
             headers.forEach(header => {
                 for (const mapKey in columnMapping) {
@@ -624,18 +685,17 @@ const handleFileUpload = (event: Event) => {
                 }
             });
 
-            // Convert rows to objects using our mapped headers
             const mappedData = rows.map(rowArray => {
                 const newRow: { [key: string]: any } = {};
                 headers.forEach((header, index) => {
-                     const mappedKey = headerMap[header] || header.trim();
-                     newRow[mappedKey] = rowArray[index];
+                    const mappedKey = headerMap[header] || header.trim();
+                    newRow[mappedKey] = rowArray[index];
                 });
                 return newRow;
             });
             
             if (appState.allData.length > 0) {
-                 saveHistorySnapshot(file.name);
+                saveHistorySnapshot(lastUpdateEl.dataset.fileName || 'Previous Data');
             }
 
             appState.allData = processData(mappedData);
@@ -645,17 +705,17 @@ const handleFileUpload = (event: Event) => {
                 return;
             }
             
-            appState.filteredData = appState.allData;
             appState.paidStatuses = {}; // Reset paid statuses on new upload
-            saveStateToLocalStorage();
-            renderDashboard();
-            updateLastUpdate(file.name);
+            lastUpdateEl.dataset.fileName = file.name;
+
+            await saveStateToFirebase(); // This will save and trigger onSnapshot for all clients
+            
             showToast(translate('toast_data_loaded'), 'success');
         } catch (error) {
             console.error(error);
             showToast(`${translate('toast_error_processing')}: ${error.message}`, 'error');
         } finally {
-            loadingOverlay.classList.add('hidden');
+            // Let the onSnapshot handler hide the loading overlay
             (event.target as HTMLInputElement).value = ''; // Reset file input
         }
     };
@@ -664,10 +724,8 @@ const handleFileUpload = (event: Event) => {
 
 // --- RENDER FUNCTIONS ---
 function renderDashboard() {
-    if (appState.filteredData.length === 0) {
-        mainContentArea.classList.add('hidden');
-        placeholder.classList.remove('hidden');
-        filterContainer.classList.add('hidden');
+    if (appState.allData.length === 0) {
+        resetToInitialState();
         return;
     }
     mainContentArea.classList.remove('hidden');
@@ -678,6 +736,8 @@ function renderDashboard() {
     clearDataBtn.classList.remove('hidden');
     aiInsightsBtn.classList.remove('hidden');
 
+    applyFilters(); // Apply current filters to potentially new data
+
     populateFilters();
     updateKPIs();
     renderColumns();
@@ -686,11 +746,31 @@ function renderDashboard() {
     translateApp();
 }
 
-function updateLastUpdate(fileName: string) {
-    const now = new Date();
-    const formattedDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+function updateLastUpdate(fileName: string, date: Date) {
+    const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
     lastUpdateEl.innerHTML = `<span data-translate-key="upload_prompt_updated">${translate('upload_prompt_updated')}</span> ${fileName} em ${formattedDate}`;
+    lastUpdateEl.dataset.fileName = fileName;
 }
+
+
+function resetToInitialState() {
+    appState.allData = [];
+    appState.filteredData = [];
+    appState.paidStatuses = {};
+    
+    mainContentArea.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    filterContainer.classList.add('hidden');
+    historyBtn.classList.add('hidden');
+    settingsBtn.classList.add('hidden');
+    clearDataBtn.classList.add('hidden');
+    aiInsightsBtn.classList.add('hidden');
+    
+    lastUpdateEl.innerHTML = `<span data-translate-key="upload_prompt_initial">${translate('upload_prompt_initial')}</span>`;
+    lastUpdateEl.removeAttribute('data-file-name');
+    destroyCharts();
+}
+
 
 function populateFilters() {
     const createOptions = (values: Set<string>): string => {
@@ -846,10 +926,10 @@ function applyFilters() {
 
     appState.filteredData = appState.allData.filter(d => {
         const arrivalDateMatch = (!arrivalStartDate || (d['Discharge Date'] && d['Discharge Date'] >= arrivalStartDate)) &&
-                                 (!arrivalEndDate || (d['Discharge Date'] && d['Discharge Date'] <= arrivalEndDate));
+                                   (!arrivalEndDate || (d['Discharge Date'] && d['Discharge Date'] <= arrivalEndDate));
     
         const freetimeDateMatch = (!freetimeStartDate || d['End of Free Time'] >= freetimeStartDate) &&
-                                  (!freetimeEndDate || d['End of Free Time'] <= freetimeEndDate);
+                                    (!freetimeEndDate || d['End of Free Time'] <= freetimeEndDate);
 
         return (poFilter.length === 0 || poFilter.includes(d.PO)) &&
                (vesselFilter.length === 0 || vesselFilter.includes(d.Vessel)) &&
@@ -866,11 +946,13 @@ function applyFilters() {
     renderDashboard();
 }
 
+// ... (The rest of the functions like modals, charts, etc., remain largely the same)
+// ... I will now paste the rest of the file, with modifications integrated.
+
 function resetFilters() {
     const selects = filterContainer.querySelectorAll('select');
     selects.forEach(s => {
         s.selectedIndex = -1;
-        // Also clear search inputs for filter dropdowns
         const searchInput = document.getElementById(`${s.id.replace('-filter', '-search-input')}`);
         if(searchInput) (searchInput as HTMLInputElement).value = '';
     });
@@ -902,7 +984,6 @@ function setupFilterSearch() {
 
 function globalSearch(term: string) {
     if (!term) {
-        // if term is empty, applyFilters would have already reset the data
         return;
     }
     const lowerTerm = term.toLowerCase();
@@ -984,16 +1065,16 @@ function openDetailsModal(container: ContainerData) {
             <div class="space-y-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
                 <h3 class="font-bold text-lg text-gray-700 dark:text-slate-200 border-b pb-2">Análise de Demurrage</h3>
                 <div class="text-center">
-                     <p class="text-6xl font-extrabold ${container['Demurrage Cost'] > 0 ? 'text-red-500' : 'text-green-500'}">${formatCurrency(container['Demurrage Cost'])}</p>
-                     <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Custo de Demurrage</p>
+                      <p class="text-6xl font-extrabold ${container['Demurrage Cost'] > 0 ? 'text-red-500' : 'text-green-500'}">${formatCurrency(container['Demurrage Cost'])}</p>
+                      <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Custo de Demurrage</p>
                 </div>
                 <div class="text-center">
-                     <p class="text-4xl font-bold ${container['Demurrage Days'] > 0 ? 'text-red-500' : 'text-green-500'}">${container['Demurrage Days']}</p>
-                     <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Dias de Demurrage</p>
+                      <p class="text-4xl font-bold ${container['Demurrage Days'] > 0 ? 'text-red-500' : 'text-green-500'}">${container['Demurrage Days']}</p>
+                      <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Dias de Demurrage</p>
                 </div>
                 <div class="text-center">
-                     <p class="text-2xl font-bold ${diffDays < 0 ? 'text-red-500' : 'text-green-500'}">${diffDays < 0 ? `${Math.abs(diffDays)} dias atrasado` : `${diffDays} dias restantes`}</p>
-                     <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Status Atual</p>
+                      <p class="text-2xl font-bold ${diffDays < 0 ? 'text-red-500' : 'text-green-500'}">${diffDays < 0 ? `${Math.abs(diffDays)} dias atrasado` : `${diffDays} dias restantes`}</p>
+                      <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Status Atual</p>
                 </div>
             </div>
         </div>
@@ -1124,7 +1205,7 @@ function renderListModalTable(data: ContainerData[]) {
                 appState.currentSort.direction = direction === 'asc' ? 'desc' : 'asc';
             } else {
                 appState.currentSort.key = newKey;
-                appState.currentSort.direction = 'desc'; // Default to desc for new columns
+                appState.currentSort.direction = 'desc';
             }
             renderListModalTable(data);
         });
@@ -1145,7 +1226,7 @@ function openRatesModal() {
     openModal('rates-modal');
 }
 
-function saveRates() {
+async function saveRates() {
     const newRates = { ...appState.demurrageRates };
     document.querySelectorAll('#rates-modal-body input[type="number"]').forEach(input => {
         const id = input.id.replace('rate-', '');
@@ -1156,18 +1237,14 @@ function saveRates() {
     });
     appState.demurrageRates = newRates;
 
-    // Efficiently recalculate cost without reprocessing all data from scratch
     appState.allData.forEach(container => {
         const shipowner = container.Shipowner.toUpperCase();
         const rate = appState.demurrageRates[shipowner] || appState.demurrageRates.default;
         container['Demurrage Cost'] = container['Demurrage Days'] * rate;
     });
 
-    saveStateToLocalStorage();
+    await saveStateToFirebase();
     showToast(translate('toast_settings_saved'), 'success');
-    
-    // applyFilters() will refresh filteredData and then renderDashboard() will update the UI
-    applyFilters();
     
     closeModal('rates-modal');
 }
@@ -1218,7 +1295,7 @@ function loadHistorySnapshot(timestamp: string) {
         appState.demurrageRates = snapshot.rates;
         appState.paidStatuses = snapshot.paidStatuses;
         
-        resetFilters(); // Also calls renderDashboard
+        resetFilters();
         
         appState.isViewingHistory = true;
         showHistoryBanner(snapshot.fileName, new Date(snapshot.timestamp));
@@ -1268,16 +1345,19 @@ function hideHistoryBanner() {
 
 function returnToLiveView() {
     hideHistoryBanner();
-    loadStateFromLocalStorage(); // Reloads the latest data
-    showToast(translate('toast_returned_to_live'), 'success');
+    location.reload(); // Simplest way to ensure a clean reload from Firebase
 }
 
 // --- PAID DEMURRAGE TAB ---
+async function handlePaidToggle(containerId, isChecked) {
+    appState.paidStatuses[containerId] = isChecked;
+    await saveStateToFirebase();
+}
+
 function renderPaidDemurrageTable() {
     const container = document.getElementById('paid-demurrage-table-container')!;
     const returnedWithCost = appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Cost'] > 0);
 
-    // Update summary cards
     const totalCost = returnedWithCost.reduce((acc, d) => acc + d['Demurrage Cost'], 0);
     const paidCost = returnedWithCost.filter(d => appState.paidStatuses[d.Container]).reduce((acc, d) => acc + d['Demurrage Cost'], 0);
     document.getElementById('summary-total-cost')!.textContent = formatCurrency(totalCost);
@@ -1328,14 +1408,12 @@ function renderPaidDemurrageTable() {
     container.querySelectorAll('.toggle-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             const target = e.target as HTMLInputElement;
-            const containerId = target.dataset.containerId!;
-            appState.paidStatuses[containerId] = target.checked;
-            saveStateToLocalStorage();
-            renderPaidDemurrageTable(); // Re-render to update summary and styles
+            handlePaidToggle(target.dataset.containerId!, target.checked);
         });
     });
 }
 
+// ... (Charts functions, AI functions, etc. remain the same)
 // --- ANALYTICS/CHARTS ---
 function destroyCharts() {
     Object.values(appState.charts).forEach(chart => chart.destroy());
@@ -1357,10 +1435,8 @@ function createOrUpdateCharts() {
     analyticsContent.classList.remove('hidden');
     analyticsPlaceholder.classList.add('hidden');
     
-    // Register the datalabels plugin globally for all charts
     Chart.register(ChartDataLabels);
 
-    // Plugin to display text when a chart has no data to show
     const noDataPlugin = {
       id: 'noData',
       afterDraw: (chart: any) => {
@@ -1370,7 +1446,7 @@ function createOrUpdateCharts() {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.font = 'bold 16px Inter';
-          ctx.fillStyle = isDark ? '#64748b' : '#9ca3af'; // slate-500 or gray-400
+          ctx.fillStyle = isDark ? '#64748b' : '#9ca3af';
           ctx.fillText(translate('chart_no_data'), (left + right) / 2, (top + bottom) / 2);
           ctx.restore();
         }
@@ -1416,14 +1492,12 @@ function createOrUpdateCharts() {
         }
     };
     
-    // --- DATA SUBSETS (SINGLE SOURCE OF TRUTH) ---
     const dataForCharts = appState.filteredData.filter(d => !d.hasDateError);
     const returnedOnTime = dataForCharts.filter(d => d['Return Date'] && (d['Demurrage Days'] || 0) === 0);
     const returnedLate = dataForCharts.filter(d => d['Return Date'] && (d['Demurrage Days'] || 0) > 0);
     const activeLate = dataForCharts.filter(d => !d['Return Date'] && (d['Demurrage Days'] || 0) > 0);
     const activeOnTime = dataForCharts.filter(d => !d['Return Date'] && (d['Demurrage Days'] || 0) === 0);
 
-    // Cost Analysis Chart
     const actualCost = returnedLate.reduce((sum, d) => sum + (d['Demurrage Cost'] || 0), 0);
     const incurringCost = activeLate.reduce((sum, d) => sum + (d['Demurrage Cost'] || 0), 0);
     
@@ -1446,16 +1520,16 @@ function createOrUpdateCharts() {
                 ...chartOptions.plugins, 
                 legend: { display: false },
                 datalabels: {
-                     ...chartOptions.plugins.datalabels,
-                     anchor: 'end',
-                     align: 'top',
-                     formatter: (value) => (value > 0 ? formatCurrency(value) : null),
+                    ...chartOptions.plugins.datalabels,
+                    anchor: 'end',
+                    align: 'top',
+                    formatter: (value) => (value > 0 ? formatCurrency(value) : null),
                 },
                 tooltip: {
                     ...tooltipConfig,
                     callbacks: {
-                         title: (tooltipItems) => tooltipItems[0].label,
-                         label: (tooltipItem) => `${translate('tooltip_cost')}: ${formatCurrency(tooltipItem.raw as number || 0)}`
+                        title: (tooltipItems) => tooltipItems[0].label,
+                        label: (tooltipItem) => `${translate('tooltip_cost')}: ${formatCurrency(tooltipItem.raw as number || 0)}`
                     }
                 }
             } 
@@ -1463,7 +1537,6 @@ function createOrUpdateCharts() {
     });
     document.getElementById('cost-summary-text')!.textContent = translate('cost_summary_text', actualCost, incurringCost);
 
-    // Operational Performance Chart
     const performanceData = [
         returnedOnTime.length, 
         returnedLate.length, 
@@ -1531,8 +1604,6 @@ function createOrUpdateCharts() {
     const returnedOnTimePercentage = totalContainersForChart > 0 ? (returnedOnTime.length * 100 / totalContainersForChart).toFixed(1) : '0.0';
     document.getElementById('performance-summary-text')!.textContent = translate('performance_donut_summary_text', returnedOnTimePercentage);
 
-
-    // Demurrage by Shipowner Chart
     const allLateContainers = [...returnedLate, ...activeLate];
     const costAndCountByShipowner = allLateContainers.reduce((acc, d) => {
         const cost = d['Demurrage Cost'] || 0;
@@ -1584,16 +1655,15 @@ function createOrUpdateCharts() {
                     title: (tooltipItems) => tooltipItems[0].label,
                     label: (tooltipItem) => `${translate('tooltip_cost')}: ${formatCurrency(tooltipItem.raw as number || 0)}`,
                     afterLabel: (tooltipItem) => {
-                       const shipowner = tooltipItem.label;
-                       const originalData = sortedShipownersData.find(d => d.shipowner === shipowner);
-                       return originalData ? `${translate('tooltip_from')} ${originalData.count} ${translate('tooltip_containers')}` : '';
+                        const shipowner = tooltipItem.label;
+                        const originalData = sortedShipownersData.find(d => d.shipowner === shipowner);
+                        return originalData ? `${translate('tooltip_from')} ${originalData.count} ${translate('tooltip_containers')}` : '';
                     }
                 }
             }
-         } }
+        } }
     });
 
-    // Average Demurrage Days by Shipowner Chart
     const daysByShipowner = allLateContainers.reduce((acc, d) => {
         const days = d['Demurrage Days'] || 0;
         if (days > 0) {
@@ -1638,71 +1708,37 @@ function createOrUpdateCharts() {
                         return `${translate('chart_tooltip_avg_days')}: ${avgDays}`;
                     },
                     afterLabel: (tooltipItem) => {
-                       const shipowner = tooltipItem.label;
-                       const originalData = avgDaysData.find(d => d.shipowner === shipowner);
-                       return originalData ? `${translate('tooltip_from')} ${originalData.count} ${translate('tooltip_containers')}` : '';
+                        const shipowner = tooltipItem.label;
+                        const originalData = avgDaysData.find(d => d.shipowner === shipowner);
+                        return originalData ? `${translate('tooltip_from')} ${originalData.count} ${translate('tooltip_containers')}` : '';
                     }
                 }
             }
-         } }
+        } }
     });
 }
 
-
 // --- PERSISTENCE ---
-function saveStateToLocalStorage() {
-    if (appState.isViewingHistory) return; // Do not save over live data when viewing history
-    const stateToSave = {
-        allData: appState.allData,
-        demurrageRates: appState.demurrageRates,
-        paidStatuses: appState.paidStatuses,
-        lastUpdate: lastUpdateEl.innerHTML,
-        currentLanguage: appState.currentLanguage
-    };
-    localStorage.setItem('demurrageAppState', JSON.stringify(stateToSave));
-}
-
-function loadStateFromLocalStorage() {
-    const savedState = localStorage.getItem('demurrageAppState');
-    if (savedState) {
-        const parsedState = JSON.parse(savedState);
-        appState.allData = parsedState.allData.map(d => {
-            const dischargeDate = d['Discharge Date'] ? new Date(d['Discharge Date']) : null;
-            const endOfFreeTime = new Date(d['End of Free Time']);
-            
-            let hasDateError = false;
-            if ((dischargeDate && dischargeDate.getUTCFullYear() < 1950) || (endOfFreeTime && endOfFreeTime.getUTCFullYear() < 1950)) {
-                hasDateError = true;
-            }
-            
-            return {
-                ...d,
-                'Discharge Date': dischargeDate,
-                'End of Free Time': endOfFreeTime,
-                'Return Date': d['Return Date'] ? new Date(d['Return Date']) : undefined,
-                hasDateError,
-            };
-        });
-        appState.filteredData = appState.allData;
-        appState.demurrageRates = parsedState.demurrageRates || { default: 100 };
-        appState.paidStatuses = parsedState.paidStatuses || {};
-        appState.currentLanguage = parsedState.currentLanguage || 'pt';
-        lastUpdateEl.innerHTML = parsedState.lastUpdate;
-        renderDashboard();
+async function clearData() {
+    // This function now clears data from Firebase
+    const confirmed = await showConfirmationDialog('Limpar Todos os Dados', 'Tem certeza que deseja limpar os dados do servidor? Esta ação é permanente e afetará todos os usuários.');
+    if (confirmed) {
+        loadingOverlay.classList.remove('hidden');
+        try {
+            await db.collection("demurrage_dashboard").doc("live_data").delete();
+            // The onSnapshot listener will automatically reset the UI for all clients.
+            saveHistorySnapshot('Data Cleared'); // Optional: keep a record of the clear action
+            localStorage.removeItem('demurrageHistory'); // Also clear local history
+            showToast(translate('toast_clear_data'), 'info');
+        } catch (error) {
+            console.error("Error clearing data in Firebase:", error);
+            showToast("Failed to clear server data.", "error");
+        } finally {
+            // The onSnapshot listener will hide the overlay
+        }
     }
 }
 
-function clearData() {
-    if (confirm('Tem certeza de que deseja limpar todos os dados e o histórico? Esta ação não pode ser desfeita.')) {
-        localStorage.removeItem('demurrageAppState');
-        localStorage.removeItem('demurrageHistory');
-        appState.allData = [];
-        appState.filteredData = [];
-        appState.paidStatuses = {};
-        location.reload();
-        showToast(translate('toast_clear_data'), 'info');
-    }
-}
 
 // --- AI INSIGHTS & REPORTS ---
 function simpleMarkdownToHtml(text) {
@@ -1712,8 +1748,8 @@ function simpleMarkdownToHtml(text) {
         .replace(/^\* (.*$)/gim, '<li class="ml-4">$1</li>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\n/g, '<br>')
-        .replace(/<br><li/g, '<li') // Fix extra breaks before list items
-        .replace(/<\/li><br>/g, '</li>'); // Fix extra breaks after list items
+        .replace(/<br><li/g, '<li')
+        .replace(/<\/li><br>/g, '</li>');
 }
 
 async function getAiInsights() {
@@ -1722,7 +1758,10 @@ async function getAiInsights() {
     openModal('ai-modal');
     
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        if (!apiKey) throw new Error("API Key for Gemini not found.");
+
+        const ai = new GoogleGenAI({ apiKey });
 
         const allLateContainers = appState.filteredData.filter(d => d['Demurrage Cost'] > 0);
         
@@ -1817,7 +1856,10 @@ async function generateDemurrageJustification(container: ContainerData) {
     </div>`;
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        if (!apiKey) throw new Error("API Key for Gemini not found.");
+
+        const ai = new GoogleGenAI({ apiKey });
 
         const prompt = `
             As a senior logistics coordinator, I need to write a formal justification report for a demurrage charge to get payment approval. Based on the data for the container below, please generate a plausible and professional report.
@@ -1880,13 +1922,12 @@ function toggleTheme() {
     const isDark = document.documentElement.classList.toggle('dark');
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
     themeToggleIcon.className = `fas fa-${isDark ? 'sun' : 'moon'}`;
-    // Re-render charts for new theme colors
     if (appState.allData.length > 0) createOrUpdateCharts();
 }
 
 function translate(key: string, ...args: any[]): string {
-    const textOrFn = translations[appState.currentLanguage][key] || translations.pt[key];
-     if (typeof textOrFn === 'function') {
+    const textOrFn = translations[appState.currentLanguage]?.[key] || translations.pt[key];
+    if (typeof textOrFn === 'function') {
         return textOrFn(...args);
     }
     return textOrFn || key;
@@ -1895,14 +1936,19 @@ function translate(key: string, ...args: any[]): string {
 function translateApp() {
     document.querySelectorAll('[data-translate-key]').forEach(el => {
         const key = el.getAttribute('data-translate-key')!;
-        if(el.hasAttribute('placeholder')) {
-            el.setAttribute('placeholder', translate(key));
-        } else {
-            el.innerHTML = translate(key);
+        // Find the innermost element that doesn't contain another translated element
+        const targetEl = el.querySelector('[data-translate-key]') ? el.childNodes[0] : el;
+        const target = el.hasAttribute('placeholder') ? el : targetEl;
+        
+        if (target instanceof HTMLElement || target instanceof Text) {
+            if (el.hasAttribute('placeholder')) {
+                el.setAttribute('placeholder', translate(key));
+            } else {
+                 target.textContent = translate(key);
+            }
         }
     });
 
-     // Special cases
     const nextLang = appState.currentLanguage === 'pt' ? 'en' : appState.currentLanguage === 'en' ? 'zh' : 'pt';
     translateBtnText.textContent = nextLang.toUpperCase();
     if(nextLang === 'zh') translateBtnText.textContent = '中文';
@@ -1910,11 +1956,11 @@ function translateApp() {
 
 function cycleLanguage() {
     appState.currentLanguage = appState.currentLanguage === 'pt' ? 'en' : appState.currentLanguage === 'en' ? 'zh' : 'pt';
-    saveStateToLocalStorage();
+    localStorage.setItem('currentLanguage', appState.currentLanguage);
     translateApp();
     if (appState.allData.length > 0) {
-      renderPaidDemurrageTable(); // Re-render table with new headers
-      createOrUpdateCharts(); // Re-render charts with new labels
+        renderPaidDemurrageTable();
+        createOrUpdateCharts();
     }
 }
 
@@ -1934,7 +1980,6 @@ function init() {
     
     document.getElementById('global-search-input')!.addEventListener('input', (e) => {
         const term = (e.target as HTMLInputElement).value;
-        // Re-apply filters first, then search within the filtered results
         applyFilters(); 
         globalSearch(term);
         renderDashboard();
@@ -1991,13 +2036,15 @@ function init() {
         document.documentElement.classList.remove('dark');
         themeToggleIcon.className = 'fas fa-moon';
     }
+    
+    appState.currentLanguage = (localStorage.getItem('currentLanguage') as any) || 'pt';
 
     setupModals();
     setupFilterSearch();
-    loadStateFromLocalStorage();
-    if(appState.allData.length === 0) {
-        translateApp();
-    }
+    
+    // Start listening to Firebase for data
+    listenForRealtimeUpdates();
+    translateApp();
 }
 
 // --- RUN APP ---
