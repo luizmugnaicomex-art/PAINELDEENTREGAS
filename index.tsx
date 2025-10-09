@@ -1,10 +1,9 @@
-// @ts-nocheck
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// --- Type definitions for CDN libraries ---
+// --- Type definitions for CDN libraries to inform TypeScript that these variables exist globally ---
 declare const firebase: any;
 declare const XLSX: any;
 declare const Chart: any;
@@ -1720,22 +1719,18 @@ function createOrUpdateCharts() {
 
 // --- PERSISTENCE ---
 async function clearData() {
-    // This function now clears data from Firebase
     const confirmed = await showConfirmationDialog('Limpar Todos os Dados', 'Tem certeza que deseja limpar os dados do servidor? Esta ação é permanente e afetará todos os usuários.');
     if (confirmed) {
         loadingOverlay.classList.remove('hidden');
         try {
             await db.collection("demurrage_dashboard").doc("live_data").delete();
-            // The onSnapshot listener will automatically reset the UI for all clients.
-            saveHistorySnapshot('Data Cleared'); // Optional: keep a record of the clear action
-            localStorage.removeItem('demurrageHistory'); // Also clear local history
+            saveHistorySnapshot('Data Cleared'); 
+            localStorage.removeItem('demurrageHistory'); 
             showToast(translate('toast_clear_data'), 'info');
         } catch (error) {
             console.error("Error clearing data in Firebase:", error);
             showToast("Failed to clear server data.", "error");
-        } finally {
-            // The onSnapshot listener will hide the overlay
-        }
+        } 
     }
 }
 
@@ -2049,3 +2044,5 @@ function init() {
 
 // --- RUN APP ---
 document.addEventListener('DOMContentLoaded', init);
+", what's wrong with the selected code?
+
