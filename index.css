@@ -1,3 +1,4 @@
+
 /*
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -48,6 +49,20 @@ tbody tr:not(.details-row):focus-visible {
 .toast { animation: slide-in 0.5s forwards, fade-out 0.5s 4.5s forwards; }
 @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; transform: translateX(100%); } }
+
+/* --- Language Switcher --- */
+.lang-btn.active {
+    background-color: #3b82f6; /* blue-500 */
+    color: white;
+}
+.dark .lang-btn.active {
+    background-color: #3b82f6;
+    color: white;
+}
+.dark .lang-btn:not(.active) {
+    color: #94a3b8; /* slate-400 */
+}
+
 
 /* --- Tabs --- */
 .tab-btn {
@@ -135,6 +150,20 @@ tbody tr.is-expanded {
     background-color: #1e293b; /* slate-800 */
 }
 
+/* --- Battery Highlight --- */
+tbody tr.is-battery {
+    background-color: #fffbeb; /* amber-50 */
+}
+.dark tbody tr.is-battery {
+    background-color: rgba(120, 53, 15, 0.1); /* dark amber tint */
+}
+tbody tr.is-battery:hover {
+    background-color: #fef3c7; /* amber-100 */
+}
+.dark tbody tr.is-battery:hover {
+    background-color: rgba(120, 53, 15, 0.2);
+}
+
 .details-cell {
     padding: 0 !important;
 }
@@ -147,7 +176,7 @@ tbody tr.is-expanded {
 }
 
 .details-content-wrapper.expanded {
-    max-height: 300px; /* Increased height for notes */
+    max-height: 400px; 
     padding: 1.25rem 1rem;
 }
 
