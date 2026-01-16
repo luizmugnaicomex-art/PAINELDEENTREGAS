@@ -3,2046 +3,1278 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// --- Type definitions for CDN libraries to inform TypeScript that these variables exist globally ---
+// --- Type definitions for CDN libraries to inform TypeScript ---
 declare const firebase: any;
 declare const XLSX: any;
-declare const Chart: any;
 declare const jspdf: any;
-declare const html2canvas: any;
-declare const ChartDataLabels: any;
 
-import { GoogleGenAI } from "@google/genai";
-
-// --- FIREBASE INITIALIZATION ---
+// --- FIREBASE INITIALIZATION (from index.tsx 1 pattern) ---
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// --- TYPE DEFINITIONS ---
-interface ContainerData {
-    [key: string]: any;
-    'PO': string;
-    'Vessel': string;
-    'Container': string;
-    'Discharge Date': Date | null;
-    'Free Days': number;
-    'Return Date'?: Date;
-    'End of Free Time': Date;
-    'Final Status': string;
-    'Loading Type': string;
-    'Cargo Type': string;
-    'Shipowner': string;
-    'Demurrage Days': number;
-    'Demurrage Cost': number;
-    hasDateError?: boolean;
-}
+// --- DOM Elements ---
+const fileUpload = document.getElementById("file-upload") as HTMLInputElement;
+const searchInput = document.getElementById("search-input") as HTMLInputElement;
+const lastUpdate = document.getElementById("last-update") as HTMLParagraphElement;
+const placeholder = document.getElementById("placeholder") as HTMLDivElement;
+const summaryStats = document.getElementById("summary-stats") as HTMLDivElement;
+const deliveryDashboard = document.getElementById("delivery-dashboard") as HTMLDivElement;
+const deliveryTabs = document.getElementById("delivery-tabs") as HTMLDivElement;
+const deliveryContent = document.getElementById("delivery-content") as HTMLDivElement;
+const exportExcelBtn = document.getElementById("export-excel-btn") as HTMLButtonElement;
+const exportPdfBtn = document.getElementById("export-pdf-btn") as HTMLButtonElement;
+const themeToggleBtn = document.getElementById("theme-toggle") as HTMLButtonElement;
+const htmlEl = document.documentElement;
 
-interface DemurrageRates {
-    [shipowner: string]: number;
-    default: number;
-}
+// --- Logo Elements ---
+const logoUpload = document.getElementById("logo-upload") as HTMLInputElement;
+const logoContainer = document.getElementById("logo-container") as HTMLDivElement;
+const companyLogo = document.getElementById("company-logo") as HTMLImageElement;
 
-interface PaidStatuses {
-    [containerId: string]: boolean;
-}
+// --- Modal Elements ---
+const modalContainer = document.getElementById("confirmation-modal-container") as HTMLDivElement;
+const modalEl = document.getElementById("confirmation-modal") as HTMLDivElement;
+const modalTitle = document.getElementById("modal-title") as HTMLHeadingElement;
+const modalMessage = document.getElementById("modal-message") as HTMLParagraphElement;
+const modalConfirmBtn = document.getElementById("modal-confirm-btn") as HTMLButtonElement;
+const modalCancelBtn = document.getElementById("modal-cancel-btn") as HTMLButtonElement;
 
-interface HistorySnapshot {
-    timestamp: string;
-    fileName: string;
-    data: ContainerData[];
-    rates: DemurrageRates;
-    paidStatuses: PaidStatuses;
-}
+// --- Language Elements ---
+const languageSwitcher = document.getElementById("language-switcher") as HTMLDivElement;
 
-interface AppState {
-    allData: ContainerData[];
-    filteredData: ContainerData[];
-    demurrageRates: DemurrageRates;
-    paidStatuses: PaidStatuses;
-    currentLanguage: 'pt' | 'en' | 'zh';
-    isViewingHistory: boolean;
-    charts: { [key: string]: any };
-    currentSort: { key: string, direction: 'asc' | 'desc' | 'none' };
-}
-
-// --- GLOBAL STATE ---
-const appState: AppState = {
-    allData: [],
-    filteredData: [],
-    demurrageRates: { default: 100, MSC: 120, COSCO: 110, CSSC: 115 },
-    paidStatuses: {},
-    currentLanguage: 'pt',
-    isViewingHistory: false,
-    charts: {},
-    currentSort: { key: 'Demurrage Days', direction: 'desc' },
-};
-
-const MAX_HISTORY_SNAPSHOTS = 20;
-
+// --- i18n ---
 const translations = {
-    pt: {
-        main_title: "DASHBOARD DE CONTROLE DE DEMURRAGE",
-        upload_prompt_initial: "Carregue sua planilha para começar",
-        upload_prompt_updated: "Última atualização:",
-        global_search_placeholder: "Pesquisar em todos os detalhes...",
-        clear_data_btn: "Limpar Dados",
-        ai_insights_btn: "AI Insights",
-        upload_btn: "Carregar XLSX",
-        filter_po: "Filtrar POs",
-        filter_vessel: "Filtrar Navios",
-        vessel_search_placeholder: "Pesquisar...",
-        filter_container: "Filtrar Contêiner",
-        filter_final_status: "Status Final",
-        filter_loading_type: "Tipo Carregamento",
-        filter_cargo_type: "Tipo de Carga",
-        filter_shipowner: "Armador (Shipowner)",
-        filter_arrival_start: "Início da Chegada",
-        filter_arrival_end: "Fim da Chegada",
-        filter_freetime_start: "Início do FreeTime",
-        filter_freetime_end: "Fim do FreeTime",
-        filter_btn: "Filtrar",
-        clear_btn: "Limpar",
-        tab_dashboard: "Dashboard",
-        tab_analytics: "Analytics",
-        tab_paid_demurrage: "Demurrage Pago",
-        kpi_demurrage_title: "Com Demurrage",
-        kpi_demurrage_subtitle: "Contêineres com prazo vencido",
-        kpi_returned_late_title: "Devolvidos com Demurrage",
-        kpi_returned_late_subtitle: "Contêineres entregues com custo",
-        kpi_risk_title: "Em Risco (Próx. 15 dias)",
-        kpi_risk_subtitle: "Contêineres com prazo vencendo",
-        kpi_returned_title: "Devolvidos no Prazo",
-        kpi_returned_subtitle: "Contêineres retornados sem custo",
-        kpi_cost_title: "Custo Total de Demurrage",
-        kpi_cost_subtitle: "*Custo de contêineres ativos e já devolvidos",
-        board_title_demurrage: "COM DEMURRAGE (ATRASADO)",
-        board_title_high_risk: "ALTO RISCO (VENCE ≤ 15 DIAS)",
-        board_title_medium_risk: "ATENÇÃO (VENCE ≤ 30 DIAS)",
-        board_title_low_risk: "SEGURO (> 30 DIAS)",
-        board_title_date_issue: "ANALISAR DATA",
-        chart_title_cost_analysis: "Análise de Custos: Real vs. Risco Gerenciado",
-        chart_title_operational_efficiency: "Eficiência Operacional",
-        chart_title_demurrage_by_shipowner: "Custo de Demurrage por Armador",
-        chart_title_avg_days_by_shipowner: "Dias Médios de Demurrage por Armador",
-        analytics_placeholder_title: "Análise Indisponível",
-        analytics_placeholder_subtitle: "Filtros atuais não retornaram dados para análise.",
-        summary_total_cost_returned: "Custo Total (Devolvidos)",
-        summary_paid: "Total Pago",
-        summary_unpaid: "Total Pendente",
-        placeholder_title: "Aguardando arquivo...",
-        placeholder_subtitle: "Selecione a planilha para iniciar a análise de demurrage.",
-        loading_text: "Processando...",
-        export_btn: "Exportar PDF",
-        save_btn: "Salvar",
-        rates_modal_title: "Taxas de Demurrage por Armador",
-        rates_modal_footer_note: "Valores não definidos usarão a taxa padrão.",
-        ai_modal_title: "AI Generated Insights",
-        history_modal_title: "Histórico de Uploads",
-        return_to_live_btn: "Voltar à visualização atual",
-        toast_clear_data: "Dados e histórico foram limpos.",
-        toast_data_loaded: "Dados carregados com sucesso!",
-        toast_no_data: "Nenhum dado encontrado no arquivo.",
-        toast_error_processing: "Erro ao processar o arquivo.",
-        toast_settings_saved: "Configurações salvas com sucesso!",
-        toast_history_loaded: "Visualizando dados históricos de",
-        toast_returned_to_live: "Retornou à visualização de dados ao vivo.",
-        cost_summary_text: (paid, potential) => `Custo real de demurrage (pago/incorrido) é ${formatCurrency(paid)}, enquanto o custo atual de contêineres ativos atrasados é ${formatCurrency(potential)}.`,
-        performance_donut_summary_text: (p) => `Do total de contêineres analisados, ${p}% foram devolvidos com sucesso, demonstrando excelente eficiência e economia de custos.`,
-        table_header_container: "Container",
-        table_header_po: "PO",
-        table_header_vessel: "Navio",
-        table_header_return_date: "Data Devolução",
-        table_header_demurrage_days: "Dias Demurrage",
-        table_header_cost: "Custo",
-        table_header_paid: "Pago?",
-        tooltip_cost: "Custo",
-        tooltip_containers: "Contêineres",
-        chart_tooltip_avg_days: "Dias Médios",
-        tooltip_from: "de",
-        chart_label_returned_on_time: "Devolvido no Prazo",
-        chart_label_returned_late: "Devolvido com Atraso",
-        chart_label_active_with_demurrage: "Ativo (com demurrage)",
-        chart_label_active_in_free_period: "Ativo (em período livre)",
-        card_status_invalid_date: "Data Inválida",
-        chart_label_actual_cost_returned: "Custo Real (Devolvidos)",
-        chart_label_incurred_cost_active: "Custo Incorrido (Ativos)",
-        chart_no_data: "Sem dados para exibir",
-        chart_label_days_suffix: "dias",
-        generate_report_btn: "Gerar Relatório de Justificativa",
-        toast_report_copied: "Relatório copiado para a área de transferência!",
-        generating_report: "Gerando relatório...",
-        report_title: "Relatório de Justificativa de Demurrage",
-        copy_btn: "Copiar",
-        error_generating_report: "Ocorreu um erro ao gerar o relatório. Verifique sua chave de API e tente novamente.",
-    },
-    en: {
-        main_title: "DEMURRAGE CONTROL DASHBOARD",
-        upload_prompt_initial: "Upload your spreadsheet to start",
-        upload_prompt_updated: "Last update:",
-        global_search_placeholder: "Search all details...",
-        clear_data_btn: "Clear Data",
-        ai_insights_btn: "AI Insights",
-        upload_btn: "Upload XLSX",
-        filter_po: "Filter POs",
-        filter_vessel: "Filter Vessels",
-        vessel_search_placeholder: "Search...",
-        filter_container: "Filter Container",
-        filter_final_status: "Final Status",
-        filter_loading_type: "Loading Type",
-        filter_cargo_type: "Cargo Type",
-        filter_shipowner: "Shipowner",
-        filter_arrival_start: "Arrival Start",
-        filter_arrival_end: "Arrival End",
-        filter_freetime_start: "FreeTime Start",
-        filter_freetime_end: "FreeTime End",
-        filter_btn: "Filter",
-        clear_btn: "Clear",
-        tab_dashboard: "Dashboard",
-        tab_analytics: "Analytics",
-        tab_paid_demurrage: "Paid Demurrage",
-        kpi_demurrage_title: "With Demurrage",
-        kpi_demurrage_subtitle: "Containers past deadline",
-        kpi_returned_late_title: "Returned with Demurrage",
-        kpi_returned_late_subtitle: "Containers delivered with cost",
-        kpi_risk_title: "At Risk (Next 15 days)",
-        kpi_risk_subtitle: "Containers with expiring deadline",
-        kpi_returned_title: "Returned on Time",
-        kpi_returned_subtitle: "Containers returned without cost",
-        kpi_cost_title: "Total Demurrage Cost",
-        kpi_cost_subtitle: "*Cost of active and already returned containers",
-        board_title_demurrage: "WITH DEMURRAGE (LATE)",
-        board_title_high_risk: "HIGH RISK (DUE ≤ 15 DAYS)",
-        board_title_medium_risk: "ATTENTION (DUE ≤ 30 DAYS)",
-        board_title_low_risk: "SAFE (> 30 DAYS)",
-        board_title_date_issue: "REVIEW DATE",
-        chart_title_cost_analysis: "Cost Analysis: Actual vs. Managed Risk",
-        chart_title_operational_efficiency: "Operational Efficiency",
-        chart_title_demurrage_by_shipowner: "Demurrage Cost by Shipowner",
-        chart_title_avg_days_by_shipowner: "Average Demurrage Days by Shipowner",
-        analytics_placeholder_title: "Analytics Unavailable",
-        analytics_placeholder_subtitle: "Current filters returned no data for analysis.",
-        summary_total_cost_returned: "Total Cost (Returned)",
-        summary_paid: "Total Paid",
-        summary_unpaid: "Total Pending",
-        placeholder_title: "Waiting for file...",
-        placeholder_subtitle: "Select the spreadsheet to start the demurrage analysis.",
-        loading_text: "Processing...",
-        export_btn: "Export PDF",
-        save_btn: "Save",
-        rates_modal_title: "Demurrage Rates by Shipowner",
-        rates_modal_footer_note: "Undefined values will use the default rate.",
-        ai_modal_title: "AI Generated Insights",
-        history_modal_title: "Upload History",
-        return_to_live_btn: "Return to live view",
-        toast_clear_data: "Data and history have been cleared.",
-        toast_data_loaded: "Data loaded successfully!",
-        toast_no_data: "No data found in the file.",
-        toast_error_processing: "Error processing the file.",
-        toast_settings_saved: "Settings saved successfully!",
-        toast_history_loaded: "Viewing historical data from",
-        toast_returned_to_live: "Returned to live data view.",
-        cost_summary_text: (paid, potential) => `Actual demurrage cost (paid/incurred) is ${formatCurrency(paid)}, while the current cost from late active containers is ${formatCurrency(potential)}.`,
-        performance_donut_summary_text: (p) => `Of the total containers analyzed, ${p}% were successfully returned, demonstrating excellent efficiency and cost savings.`,
-        table_header_container: "Container",
-        table_header_po: "PO",
-        table_header_vessel: "Vessel",
-        table_header_return_date: "Return Date",
-        table_header_demurrage_days: "Demurrage Days",
-        table_header_cost: "Cost",
-        table_header_paid: "Paid?",
-        tooltip_cost: "Cost",
-        tooltip_containers: "Containers",
-        chart_tooltip_avg_days: "Average Days",
-        tooltip_from: "from",
-        chart_label_returned_on_time: "Returned on Time",
-        chart_label_returned_late: "Returned Late",
-        chart_label_active_with_demurrage: "Active (with demurrage)",
-        chart_label_active_in_free_period: "Active (in free period)",
-        card_status_invalid_date: "Invalid Date",
-        chart_label_actual_cost_returned: "Actual Cost (Returned)",
-        chart_label_incurred_cost_active: "Incurred Cost (Active)",
-        chart_no_data: "No data to display",
-        chart_label_days_suffix: "days",
-        generate_report_btn: "Generate Justification Report",
-        toast_report_copied: "Report copied to clipboard!",
-        generating_report: "Generating report...",
-        report_title: "Demurrage Justification Report",
-        copy_btn: "Copy",
-        error_generating_report: "An error occurred while generating the report. Please check your API key and try again.",
-    },
-    zh: {
-        main_title: "滞期费控制仪表板",
-        upload_prompt_initial: "上传您的电子表格以开始",
-        upload_prompt_updated: "最后更新:",
-        global_search_placeholder: "搜索所有详情...",
-        clear_data_btn: "清除数据",
-        ai_insights_btn: "AI 洞察",
-        upload_btn: "上传 XLSX",
-        filter_po: "筛选采购订单",
-        filter_vessel: "筛选船只",
-        vessel_search_placeholder: "搜索...",
-        filter_container: "筛选集装箱",
-        filter_final_status: "最终状态",
-        filter_loading_type: "装载类型",
-        filter_cargo_type: "货物类型",
-        filter_shipowner: "船东",
-        filter_arrival_start: "抵达开始日期",
-        filter_arrival_end: "抵达结束日期",
-        filter_freetime_start: "免租期开始日期",
-        filter_freetime_end: "免租期结束日期",
-        filter_btn: "筛选",
-        clear_btn: "清除",
-        tab_dashboard: "仪表板",
-        tab_analytics: "分析",
-        tab_paid_demurrage: "已付滞期费",
-        kpi_demurrage_title: "有滞期费",
-        kpi_demurrage_subtitle: "超过期限的集装箱",
-        kpi_returned_late_title: "退还有滞期费",
-        kpi_returned_late_subtitle: "有成本交付的集装箱",
-        kpi_risk_title: "有风险 (未来15天)",
-        kpi_risk_subtitle: "期限即将到期的集装箱",
-        kpi_returned_title: "准时退还",
-        kpi_returned_subtitle: "无成本退还的集装箱",
-        kpi_cost_title: "总滞期费成本",
-        kpi_cost_subtitle: "*活动中和已退还集装箱的成本",
-        board_title_demurrage: "有滞期费 (延迟)",
-        board_title_high_risk: "高风险 (到期 ≤ 15天)",
-        board_title_medium_risk: "注意 (到期 ≤ 30天)",
-        board_title_low_risk: "安全 (> 30天)",
-        board_title_date_issue: "审查日期",
-        chart_title_cost_analysis: "成本分析：实际与管理风险",
-        chart_title_operational_efficiency: "运营绩效",
-        chart_title_demurrage_by_shipowner: "按船东划分的滞期费成本",
-        chart_title_avg_days_by_shipowner: "船东平均滞期天数",
-        analytics_placeholder_title: "分析不可用",
-        analytics_placeholder_subtitle: "当前筛选器未返回可供分析的数据。",
-        summary_total_cost_returned: "总成本 (已退还)",
-        summary_paid: "总计已付",
-        summary_unpaid: "总计待付",
-        placeholder_title: "等待文件...",
-        placeholder_subtitle: "选择电子表格以开始滞期费分析。",
-        loading_text: "处理中...",
-        export_btn: "导出 PDF",
-        save_btn: "保存",
-        rates_modal_title: "按船东划分的滞期费率",
-        rates_modal_footer_note: "未定义的值将使用默认费率。",
-        ai_modal_title: "AI 生成的洞察",
-        history_modal_title: "上传历史",
-        return_to_live_btn: "返回实时视图",
-        toast_clear_data: "数据和历史记录已清除。",
-        toast_data_loaded: "数据加载成功！",
-        toast_no_data: "文件中未找到数据。",
-        toast_error_processing: "处理文件时出错。",
-        toast_settings_saved: "设置已成功保存！",
-        toast_history_loaded: "正在查看历史数据从",
-        toast_returned_to_live: "已返回实时数据视图。",
-        cost_summary_text: (paid, potential) => `实际滞期费成本（已付/已发生）为 ${formatCurrency(paid)}，而当前延迟活动集装箱的成本为 ${formatCurrency(potential)}。`,
-        performance_donut_summary_text: (p) => `在分析的总集装箱中，${p}% 已成功归还，显示出卓越的效率和成本节约。`,
-        table_header_container: "集装箱",
-        table_header_po: "采购订单",
-        table_header_vessel: "船只",
-        table_header_return_date: "退还日期",
-        table_header_demurrage_days: "滞期天数",
-        table_header_cost: "成本",
-        table_header_paid: "已付?",
-        tooltip_cost: "成本",
-        tooltip_containers: "集装箱",
-        chart_tooltip_avg_days: "平均天数",
-        tooltip_from: "来自",
-        chart_label_returned_on_time: "按时归还",
-        chart_label_returned_late: "延迟归还",
-        chart_label_active_with_demurrage: "活跃 (有滞期费)",
-        chart_label_active_in_free_period: "活跃 (免租期内)",
-        card_status_invalid_date: "无效日期",
-        chart_label_actual_cost_returned: "实际成本 (已退还)",
-        chart_label_incurred_cost_active: "发生费用 (活动中)",
-        chart_no_data: "无数据显示",
-        chart_label_days_suffix: "天",
-        generate_report_btn: "生成理由报告",
-        toast_report_copied: "报告已复制到剪贴板！",
-        generating_report: "正在生成报告...",
-        report_title: "滞期费理由报告",
-        copy_btn: "复制",
-        error_generating_report: "生成报告时出错。请检查您的 API 密钥并重试。",
-    }
+  "pt-BR": {
+    pageTitle: "Painel de Entregas de Contêineres",
+    headerTitle: "Painel de Entregas",
+    uploadPrompt: "Carregue sua planilha de agendamento para começar",
+    searchInputPlaceholder: "Pesquisar container, BL, navio...",
+    uploadLogoTooltip: "Carregar logo da empresa",
+    toggleThemeTooltip: "Alternar tema",
+    uploadSheetButton: "Carregar",
+    uploadSheetTooltip: "Carregar Planilha",
+    exportExcelButton: "Exportar Excel",
+    exportPdfButton: "Exportar PDF",
+    processing: "Processando...",
+    placeholderTitle: "Aguardando planilha...",
+    placeholderMessage: "Selecione um arquivo .xlsx para visualizar a programação de entregas.",
+    imageTooLarge: "O arquivo de imagem é muito grande (máx 2MB).",
+    imageReadError: "Não foi possível ler o arquivo de imagem.",
+    logoUpdated: "Logo da empresa atualizado!",
+    logoUploadError: "Erro ao carregar o logo.",
+    sheetLoaded: "Planilha de entregas carregada!",
+    fileReadError: "Falha ao ler o arquivo.",
+    emptySheetError: "A planilha de agendamento está vazia.",
+    fileProcessError: "Erro ao processar arquivo.",
+    noDeliverySheet: "Nenhuma planilha de agendamento de entregas foi encontrada.",
+    noDataToExport: "Não há dados para exportar.",
+    excelGenerated: "Arquivo Excel gerado!",
+    pdfGenerated: "Arquivo PDF gerado!",
+    statusUpdated: (containerId: string, status: string) => `Container ${containerId} atualizado para ${status}!`,
+    fieldUpdated: (field: string) => `Campo "${field.replace(/_/g, " ")}" atualizado.`,
+    confirmAction: "Confirmar Ação",
+    areYouSure: "Tem certeza que deseja continuar?",
+    confirmButton: "Confirmar",
+    cancelButton: "Cancelar",
+    confirmStatusChangeTitle: "Confirmar Alteração de Status",
+    confirmStatusChangeMessage: (containerId: string, status: string) =>
+      `Tem certeza que deseja alterar o status de ${containerId} para "${status}"? Esta ação é definitiva.`,
+    exportExcelTitle: "Exportar para Excel",
+    exportExcelMessage: "Deseja gerar o arquivo .xlsx com os dados atuais?",
+    exportPdfTitle: "Exportar para PDF",
+    exportPdfMessage: "Deseja gerar o arquivo .pdf com os dados atuais?",
+    totalContainers: "Agendados",
+    delivered: "Entregues",
+    inTransit: "A Caminho",
+    postponed: "Adiados",
+    pending: "Pendentes",
+    canceled: "Cancelados",
+    noResultsTitle: "Nenhum resultado encontrado",
+    noResultsMessage: "Nenhum resultado encontrado para os filtros aplicados.",
+    containersDelivered: (delivered: number, total: number) => `${delivered} de ${total} containers entregues`,
+    undefinedDate: "Data não definida",
+    dateNotAvailable: "N/D",
+    tableHeaderRow: "#",
+    tableHeaderContainer: "Container",
+    tableHeaderBL: "BL",
+    tableHeaderVessel: "Navio",
+    tableHeaderCompany: "Transportadora",
+    tableHeaderPlate: "Placa",
+    tableHeaderWarehouse: "Armazém",
+    tableHeaderStatus: "Status",
+    tableHeaderLot: "Lote",
+    STATUS_PENDENTE: "Pendente",
+    STATUS_A_CAMINHO: "A Caminho",
+    STATUS_ADIADO: "Adiado",
+    STATUS_ENTREGUE: "Entregue",
+    STATUS_CANCELADO: "Cancelado",
+    detailsVessel: "Navio (Vessel)",
+    detailsWarehouse: "Armazém",
+    detailsNotes: "Observações",
+    detailsMaterial: "Tipo de Material",
+    detailsLot: "Lote (LOT)",
+    detailsCompany: "Transportadora",
+    performanceTitle: "Desempenho por Transportadora",
+    badgeBattery: "Bateria",
+    pdfTitle: "Programação de Entregas de Contêineres",
+    pdfGeneratedOn: (date: string) => `Relatório gerado em: ${date}`,
+    pdfPage: (page: number, total: number) => `Página ${page} de ${total}`,
+    lastUpdateText: (sheet: string, date: string) => `Dados de "${sheet}" | Carregado em: ${date}`,
+    changeStatusFor: (containerId: string) => `Alterar status do container ${containerId || ""}`,
+    viewDetailsFor: (containerId: string) => `Ver detalhes do container ${containerId || "sem identificação"}`,
+  },
+  "en-US": {
+    pageTitle: "Container Delivery Dashboard",
+    headerTitle: "Delivery Dashboard",
+    uploadPrompt: "Upload your schedule spreadsheet to begin",
+    searchInputPlaceholder: "Search container, BL, vessel...",
+    uploadLogoTooltip: "Upload company logo",
+    toggleThemeTooltip: "Toggle theme",
+    uploadSheetButton: "Upload",
+    uploadSheetTooltip: "Upload Spreadsheet",
+    exportExcelButton: "Export Excel",
+    exportPdfButton: "Export PDF",
+    processing: "Processing...",
+    placeholderTitle: "Waiting for spreadsheet...",
+    placeholderMessage: "Select an .xlsx file to view the delivery schedule.",
+    imageTooLarge: "Image file is too large (max 2MB).",
+    imageReadError: "Could not read image file.",
+    logoUpdated: "Company logo updated!",
+    logoUploadError: "Error uploading logo.",
+    sheetLoaded: "Delivery spreadsheet loaded!",
+    fileReadError: "Failed to read the file.",
+    emptySheetError: "The scheduling spreadsheet is empty.",
+    fileProcessError: "Error processing file.",
+    noDeliverySheet: "No delivery schedule sheet was found.",
+    noDataToExport: "No data to export.",
+    excelGenerated: "Excel file generated!",
+    pdfGenerated: "PDF file generated!",
+    statusUpdated: (containerId: string, status: string) => `Container ${containerId} updated to ${status}!`,
+    fieldUpdated: (field: string) => `Field "${field.replace(/_/g, " ")}" updated.`,
+    confirmAction: "Confirm Action",
+    areYouSure: "Are you sure you want to continue?",
+    confirmButton: "Confirm",
+    cancelButton: "Cancel",
+    confirmStatusChangeTitle: "Confirm Status Change",
+    confirmStatusChangeMessage: (containerId: string, status: string) =>
+      `Are you sure you want to change the status of ${containerId} to "${status}"? This action is final.`,
+    exportExcelTitle: "Export to Excel",
+    exportExcelMessage: "Do you want to generate the .xlsx file with the current data?",
+    exportPdfTitle: "Export to PDF",
+    exportPdfMessage: "Do you want to generate the .pdf file with the current data?",
+    totalContainers: "Scheduled",
+    delivered: "Delivered",
+    inTransit: "In Transit",
+    postponed: "Postponed",
+    pending: "Pending",
+    canceled: "Canceled",
+    noResultsTitle: "No results found",
+    noResultsMessage: "No results found for the applied filters.",
+    containersDelivered: (delivered: number, total: number) => `${delivered} of ${total} containers delivered`,
+    undefinedDate: "Date not set",
+    dateNotAvailable: "N/A",
+    tableHeaderRow: "#",
+    tableHeaderContainer: "Container",
+    tableHeaderBL: "BL",
+    tableHeaderVessel: "Vessel",
+    tableHeaderCompany: "Carrier",
+    tableHeaderPlate: "Plate",
+    tableHeaderWarehouse: "Warehouse",
+    tableHeaderStatus: "Status",
+    tableHeaderLot: "LOT",
+    STATUS_PENDENTE: "Pending",
+    STATUS_A_CAMINHO: "In Transit",
+    STATUS_ADIADO: "Postponed",
+    STATUS_ENTREGUE: "Delivered",
+    STATUS_CANCELADO: "Canceled",
+    detailsVessel: "Vessel",
+    detailsWarehouse: "Warehouse",
+    detailsNotes: "Notes",
+    detailsMaterial: "Material Type",
+    detailsLot: "LOT Number",
+    detailsCompany: "Carrier",
+    performanceTitle: "Carrier Performance",
+    badgeBattery: "Battery",
+    pdfTitle: "Container Delivery Schedule",
+    pdfGeneratedOn: (date: string) => `Report generated on: ${date}`,
+    pdfPage: (page: number, total: number) => `Page ${page} of ${total}`,
+    lastUpdateText: (sheet: string, date: string) => `Data from "${sheet}" | Loaded on: ${date}`,
+    changeStatusFor: (containerId: string) => `Change status for container ${containerId || ""}`,
+    viewDetailsFor: (containerId: string) => `View details for container ${containerId || "unidentified"}`,
+  },
+  "zh-CN": {
+    pageTitle: "集装箱交付仪表板",
+    headerTitle: "交付仪表板",
+    uploadPrompt: "上传您的排程电子表格以开始",
+    searchInputPlaceholder: "搜索集装箱、提单 (BL)、船名...",
+    uploadLogoTooltip: "上传公司标志",
+    toggleThemeTooltip: "切换主题",
+    uploadSheetButton: "上传",
+    uploadSheetTooltip: "上传电子表格",
+    exportExcelButton: "导出 Excel",
+    exportPdfButton: "导出 PDF",
+    processing: "处理中...",
+    placeholderTitle: "等待电子表格...",
+    placeholderMessage: "选择一个 .xlsx 文件以查看交付计划。",
+    imageTooLarge: "图片文件太大（最大 2MB）。",
+    imageReadError: "无法读取图片文件。",
+    logoUpdated: "公司标志已更新！",
+    logoUploadError: "上传标志时出错。",
+    sheetLoaded: "交付电子表格已加载！",
+    fileReadError: "读取文件失败。",
+    emptySheetError: "排程电子表格为空。",
+    fileProcessError: "处理文件时出错。",
+    noDeliverySheet: "未找到交付计划表。",
+    noDataToExport: "无数据可导出。",
+    excelGenerated: "Excel 文件已生成！",
+    pdfGenerated: "PDF 文件已生成！",
+    statusUpdated: (containerId: string, status: string) => `集装箱 ${containerId} 已更新为 ${status}！`,
+    fieldUpdated: (field: string) => `字段 "${field.replace(/_/g, " ")}" 已更新。`,
+    confirmAction: "确认操作",
+    areYouSure: "您确定要继续吗？",
+    confirmButton: "确认",
+    cancelButton: "取消",
+    confirmStatusChangeTitle: "确认状态更改",
+    confirmStatusChangeMessage: (containerId: string, status: string) =>
+      `您确定要将 ${containerId} 的状态更改为 "${status}" 吗？此操作是最终的。`,
+    exportExcelTitle: "导出到 Excel",
+    exportExcelMessage: "您要使用当前数据生成 .xlsx 文件吗？",
+    exportPdfTitle: "导出到 PDF",
+    exportPdfMessage: "您要使用当前数据生成 .pdf 文件吗？",
+    totalContainers: "总集装箱数",
+    delivered: "已交付",
+    inTransit: "运输中",
+    postponed: "已推迟",
+    pending: "待处理",
+    canceled: "已取消",
+    noResultsTitle: "未找到结果",
+    noResultsMessage: "未找到符合所应用筛选条件的结果。",
+    containersDelivered: (delivered: number, total: number) => `${total} 个集装箱中已交付 ${delivered} 个`,
+    undefinedDate: "未设置日期",
+    dateNotAvailable: "不适用",
+    tableHeaderRow: "#",
+    tableHeaderContainer: "集装箱",
+    tableHeaderBL: "提单 (BL)",
+    tableHeaderVessel: "船名",
+    tableHeaderCompany: "运输公司",
+    tableHeaderPlate: "车牌",
+    tableHeaderWarehouse: "仓库",
+    tableHeaderStatus: "状态",
+    tableHeaderLot: "批号 (LOT)",
+    STATUS_PENDENTE: "待处理",
+    STATUS_A_CAMINHO: "运输中",
+    STATUS_ADIADO: "已推迟",
+    STATUS_ENTREGUE: "已交付",
+    STATUS_CANCELADO: "已取消",
+    detailsVessel: "船名",
+    detailsWarehouse: "仓库",
+    detailsNotes: "备注",
+    detailsMaterial: "物料类型",
+    detailsLot: "批号",
+    detailsCompany: "运输公司",
+    performanceTitle: "承运人绩效",
+    badgeBattery: "电池",
+    pdfTitle: "集装箱交付计划",
+    pdfGeneratedOn: (date: string) => `报告生成于：${date}`,
+    pdfPage: (page: number, total: number) => `第 ${page} 页，共 ${total} 页`,
+    lastUpdateText: (sheet: string, date: string) => `数据来源 "${sheet}" | 加载于：${date}`,
+    changeStatusFor: (containerId: string) => `更改集装箱 ${containerId || ""} 的状态`,
+    viewDetailsFor: (containerId: string) => `查看集装箱 ${containerId || "未识别"} 的详细信息`,
+  },
 };
 
-// --- DOM ELEMENTS ---
-const fileUpload = document.getElementById('file-upload') as HTMLInputElement;
-const lastUpdateEl = document.getElementById('last-update') as HTMLParagraphElement;
-const loadingOverlay = document.getElementById('loading-overlay') as HTMLDivElement;
-const placeholder = document.getElementById('placeholder') as HTMLDivElement;
-const mainContentArea = document.getElementById('main-content-area') as HTMLDivElement;
-const filterContainer = document.getElementById('filter-container') as HTMLDivElement;
-const kpiContainer = document.getElementById('kpi-container') as HTMLDivElement;
-const clearDataBtn = document.getElementById('clear-data-btn') as HTMLButtonElement;
-const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement;
-const aiInsightsBtn = document.getElementById('ai-insights-btn') as HTMLButtonElement;
-const applyFiltersBtn = document.getElementById('apply-filters-btn') as HTMLButtonElement;
-const resetFiltersBtn = document.getElementById('reset-filters-btn') as HTMLButtonElement;
-const themeToggleBtn = document.getElementById('theme-toggle-btn') as HTMLButtonElement;
-const themeToggleIcon = document.getElementById('theme-toggle-icon') as HTMLElement;
-const translateBtn = document.getElementById('translate-btn') as HTMLButtonElement;
-const translateBtnText = document.getElementById('translate-btn-text') as HTMLSpanElement;
+type Language = keyof typeof translations;
+let currentLanguage: Language = "pt-BR";
+type TranslationKey = keyof typeof translations["pt-BR"];
 
-// History Elements
-const historyBtn = document.getElementById('history-btn') as HTMLButtonElement;
-const historyModal = document.getElementById('history-modal') as HTMLDivElement;
-const historyModalCloseBtn = document.getElementById('history-modal-close-btn') as HTMLButtonElement;
-const historyModalBody = document.getElementById('history-modal-body') as HTMLDivElement;
-const historyBanner = document.getElementById('history-banner') as HTMLDivElement;
-const historyBannerText = document.getElementById('history-banner-text') as HTMLSpanElement;
-const returnToLiveBtn = document.getElementById('return-to-live-btn') as HTMLButtonElement;
-
-// Modals
-const detailsModal = document.getElementById('details-modal') as HTMLDivElement;
-const listModal = document.getElementById('list-modal') as HTMLDivElement;
-const ratesModal = document.getElementById('rates-modal') as HTMLDivElement;
-const aiModal = document.getElementById('ai-modal') as HTMLDivElement;
-
-// --- FIREBASE INTEGRATION ---
-let isUpdatingFromFirebase = false; // Flag to prevent write loops
-
-// Saves the entire application state to Firebase
-async function saveStateToFirebase() {
-    if (isUpdatingFromFirebase) {
-        console.log("Firebase update in progress, skipping save to prevent loop.");
-        return;
-    }
-    try {
-        const stateToSave = {
-            allData: appState.allData,
-            demurrageRates: appState.demurrageRates,
-            paidStatuses: appState.paidStatuses,
-            lastUpdate: new Date(),
-            lastUpdateFileName: lastUpdateEl.dataset.fileName || 'N/A'
-        };
-        await db.collection("demurrage_dashboard").doc("live_data").set(stateToSave);
-        console.log("State saved to Firebase.");
-    } catch (error) {
-        console.error("Error saving state to Firebase: ", error);
-        showToast("Failed to sync changes with the server.", "error");
-    }
+function t(key: TranslationKey, ...args: any[]): string {
+  const translation = (translations[currentLanguage] as any)?.[key] ?? (translations["pt-BR"] as any)[key];
+  if (typeof translation === "function") return translation(...args);
+  return translation ?? String(key);
 }
 
-// Listens for real-time updates from Firebase
+const statusKeyMap: { [key: string]: TranslationKey } = {
+  PENDENTE: "STATUS_PENDENTE",
+  "A CAMINHO": "STATUS_A_CAMINHO",
+  ADIADO: "STATUS_ADIADO",
+  ENTREGUE: "STATUS_ENTREGUE",
+  CANCELADO: "STATUS_CANCELADO",
+};
+
+// --- APP STATE ---
+let deliveryData: any[] = [];
+let searchDebounceTimer: number;
+let activeStatusFilter: string | null = null;
+
+function updateStaticText() {
+  document.title = t("pageTitle");
+  document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n as TranslationKey;
+    el.textContent = t(key);
+  });
+  document.querySelectorAll<HTMLElement>("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.dataset.i18nPlaceholder as TranslationKey;
+    (el as HTMLInputElement).placeholder = t(key);
+  });
+  document.querySelectorAll<HTMLElement>("[data-i18n-title]").forEach((el) => {
+    const key = el.dataset.i18nTitle as TranslationKey;
+    el.title = t(key);
+  });
+  document.querySelectorAll<HTMLElement>("[data-i18n-aria-label]").forEach((el) => {
+    const key = (el as any).dataset.i18nArialabel as TranslationKey;
+    el.setAttribute("aria-label", t(key));
+  });
+}
+
+function setLanguage(lang: Language) {
+  if (!(translations as any)[lang]) return;
+  currentLanguage = lang;
+  htmlEl.lang = lang;
+  localStorage.setItem("language", lang);
+
+  languageSwitcher?.querySelectorAll("button").forEach((btn) => {
+    btn.classList.toggle("active", (btn as HTMLButtonElement).dataset.lang === lang);
+  });
+
+  updateStaticText();
+
+  if (deliveryData.length > 0) applyFiltersAndRender();
+  else resetUI();
+}
+
+languageSwitcher?.addEventListener("click", (event) => {
+  const target = event.target as HTMLButtonElement;
+  if (target && target.matches("[data-lang]")) setLanguage(target.dataset.lang as Language);
+});
+
+// --- THEME ---
+const themeIcon = themeToggleBtn?.querySelector("i");
+
+function setTheme(theme: "light" | "dark") {
+  if (!themeIcon) return;
+  htmlEl.classList.toggle("dark", theme === "dark");
+  themeIcon.classList.toggle("fa-sun", theme === "light");
+  themeIcon.classList.toggle("fa-moon", theme === "dark");
+}
+
+function toggleTheme() {
+  const newTheme = htmlEl.classList.contains("dark") ? "light" : "dark";
+  localStorage.setItem("theme", newTheme);
+  setTheme(newTheme as any);
+}
+
+themeToggleBtn?.addEventListener("click", toggleTheme);
+
+// --- TOAST ---
+function showToast(message: string, type: "success" | "error" | "warning" = "success") {
+  const toastContainer = document.getElementById("toast-container");
+  if (!toastContainer) return;
+
+  const toast = document.createElement("div");
+  const icons = { success: "fa-check-circle", error: "fa-times-circle", warning: "fa-exclamation-triangle" };
+  const colors = { success: "bg-green-500", error: "bg-red-500", warning: "bg-yellow-500" };
+
+  toast.className = `toast ${colors[type]} text-white py-3 px-5 rounded-lg shadow-xl flex items-center mb-2`;
+  toast.innerHTML = `<i class="fas ${icons[type]} mr-3" aria-hidden="true"></i> <p>${message}</p>`;
+  toastContainer.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// --- CONFIRM MODAL ---
+function showConfirmationDialog(title: string, message: string): Promise<boolean> {
+  const previouslyFocusedElement = document.activeElement as HTMLElement;
+
+  return new Promise((resolve) => {
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+
+    modalContainer.classList.remove("hidden");
+    setTimeout(() => modalContainer.classList.add("visible"), 10);
+
+    modalConfirmBtn.focus();
+
+    const closeModal = () => {
+      modalContainer.classList.remove("visible");
+      setTimeout(() => modalContainer.classList.add("hidden"), 200);
+      previouslyFocusedElement?.focus();
+    };
+
+    const handleConfirm = () => {
+      closeModal();
+      resolve(true);
+    };
+
+    const handleCancel = () => {
+      closeModal();
+      resolve(false);
+    };
+
+    modalConfirmBtn.addEventListener("click", handleConfirm, { once: true });
+    modalCancelBtn.addEventListener("click", handleCancel, { once: true });
+  });
+}
+
+// --- LOGO (local + optional sync through Firebase state) ---
+function handleLogoUpload(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  if (file.size > 2 * 1024 * 1024) {
+    showToast(t("imageTooLarge"), "error");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    if (typeof e.target?.result !== "string") {
+      showToast(t("imageReadError"), "error");
+      return;
+    }
+    const dataUrl = e.target.result;
+    localStorage.setItem("companyLogo", dataUrl);
+    companyLogo.src = dataUrl;
+    logoContainer.classList.remove("hidden");
+    showToast(t("logoUpdated"), "success");
+
+    // Optional: sync logo via Firebase too (so other users see it)
+    await saveStateToFirebase({ companyLogo: dataUrl });
+  };
+
+  reader.onerror = () => showToast(t("logoUploadError"), "error");
+  reader.readAsDataURL(file);
+  logoUpload.value = "";
+}
+
+function loadLogoFromStorage() {
+  const savedLogo = localStorage.getItem("companyLogo");
+  if (savedLogo) {
+    companyLogo.src = savedLogo;
+    logoContainer.classList.remove("hidden");
+  }
+}
+
+logoUpload?.addEventListener("change", handleLogoUpload);
+
+// --- FIREBASE INTEGRATION (same pattern as index.tsx 1) ---
+let isUpdatingFromFirebase = false;
+
+type FirebaseState = {
+  deliveryData?: any[];
+  lastUpdate?: any; // Firestore Timestamp
+  lastUpdateSheetName?: string;
+  companyLogo?: string;
+};
+
+const FIREBASE_COLLECTION = "delivery_dashboard";
+const FIREBASE_DOC = "live_data";
+
+async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
+  if (isUpdatingFromFirebase) {
+    console.log("Firebase update in progress, skipping save to prevent loop.");
+    return;
+  }
+
+  try {
+    const stateToSave: FirebaseState = {
+      deliveryData,
+      lastUpdate: new Date(),
+      lastUpdateSheetName: lastUpdate.dataset.sheetName || "",
+      companyLogo: localStorage.getItem("companyLogo") || "",
+      ...patch,
+    };
+
+    await db.collection(FIREBASE_COLLECTION).doc(FIREBASE_DOC).set(stateToSave, { merge: true });
+    console.log("State saved to Firebase.");
+  } catch (error) {
+    console.error("Error saving state to Firebase:", error);
+    showToast("Failed to sync changes with the server.", "error");
+  }
+}
+
 function listenForRealtimeUpdates() {
-    db.collection("demurrage_dashboard").doc("live_data").onSnapshot(doc => {
+  db.collection(FIREBASE_COLLECTION)
+    .doc(FIREBASE_DOC)
+    .onSnapshot(
+      (doc: any) => {
         isUpdatingFromFirebase = true;
         console.log("Received update from Firebase.");
-        loadingOverlay.classList.remove('hidden');
 
         if (doc.exists) {
-            const data = doc.data();
+          const data: FirebaseState = doc.data() || {};
 
-            // Re-hydrate date objects from Firestore Timestamps
-            appState.allData = (data.allData || []).map(d => ({
-                ...d,
-                'Discharge Date': d['Discharge Date'] ? d['Discharge Date'].toDate() : null,
-                'End of Free Time': d['End of Free Time'] ? d['End of Free Time'].toDate() : new Date(),
-                'Return Date': d['Return Date'] ? d['Return Date'].toDate() : undefined,
-            }));
+          deliveryData = Array.isArray(data.deliveryData) ? data.deliveryData : [];
+          activeStatusFilter = null;
+          searchInput.value = "";
 
-            appState.demurrageRates = data.demurrageRates || { default: 100 };
-            appState.paidStatuses = data.paidStatuses || {};
-            appState.filteredData = appState.allData; // Reset filters to show all data from new state
-            
-            const lastUpdateDate = data.lastUpdate?.toDate();
-            if (lastUpdateDate) {
-                 updateLastUpdate(data.lastUpdateFileName, lastUpdateDate);
-            }
-            
-            renderDashboard();
+          // Sync logo if present
+          if (data.companyLogo && typeof data.companyLogo === "string") {
+            localStorage.setItem("companyLogo", data.companyLogo);
+            companyLogo.src = data.companyLogo;
+            logoContainer.classList.toggle("hidden", !data.companyLogo);
+          }
 
+          const lastUpdateDate = data.lastUpdate?.toDate ? data.lastUpdate.toDate() : null;
+          const sheetName = data.lastUpdateSheetName || "Sheet";
+          if (lastUpdateDate) {
+            lastUpdate.dataset.sheetName = sheetName;
+            lastUpdate.textContent = t("lastUpdateText", sheetName, lastUpdateDate.toLocaleString(currentLanguage));
+          }
+
+          if (deliveryData.length > 0) applyFiltersAndRender();
+          else resetUI();
         } else {
-            console.log("No live data found in Firebase. Resetting UI.");
-            resetToInitialState();
+          resetUI();
         }
-        
-        // Release the flag after a short delay to allow UI to render
-        setTimeout(() => { 
-            isUpdatingFromFirebase = false; 
-            loadingOverlay.classList.add('hidden');
-        }, 500);
 
-    }, error => {
-        console.error("Firebase listener error: ", error);
+        setTimeout(() => {
+          isUpdatingFromFirebase = false;
+        }, 250);
+      },
+      (error: any) => {
+        console.error("Firebase listener error:", error);
         showToast("Connection to the server was lost. Please check your internet.", "error");
-        loadingOverlay.classList.add('hidden');
-    });
+      }
+    );
 }
 
-// --- UTILITY FUNCTIONS ---
-const formatDate = (date: Date | null | undefined, locale = appState.currentLanguage): string => {
-    if (!date) return 'N/A';
-    return date.toLocaleDateString(locale === 'pt' ? 'pt-BR' : locale, {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        timeZone: 'UTC'
-    });
-};
+// --- DATA HELPERS ---
+function findDeliverySheet(workbook: any): string {
+  const keywords = [
+    "DELIVERY",
+    "SCHEDULE",
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "SUNDAY",
+    "SEGUNDA",
+    "TERÇA",
+    "QUARTA",
+    "QUINTA",
+    "SEXTA",
+    "SÁBADO",
+    "DOMINGO",
+  ];
+  return (
+    workbook.SheetNames.find((name: string) => {
+      const upperName = name.toUpperCase();
+      return keywords.some((key) => upperName.includes(key));
+    }) || workbook.SheetNames[0]
+  );
+}
 
-const formatCurrency = (amount: number, currency = 'USD'): string => {
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 2
-    }).format(amount);
-};
+function excelDateToJSDate(serial: string | number): Date | null {
+  if (!serial) return null;
 
-const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-
-    const colors = {
-        success: 'bg-green-500',
-        error: 'bg-red-500',
-        info: 'bg-blue-500',
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `toast text-white p-4 rounded-lg shadow-lg mb-2 ${colors[type]}`;
-    toast.textContent = message;
-
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 5000);
-};
-
-function parseDate(dateInput: any): Date {
-    if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
-        return dateInput;
-    }
-    if (typeof dateInput === 'string') {
-        const isoMatch = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (isoMatch) return new Date(dateInput);
-
-        const parts = dateInput.split(/[/.-]/);
-        if (parts.length === 3) {
-            const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10);
-            let year = parseInt(parts[2], 10);
-            if (year < 100) year += 2000;
-
-            if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                return new Date(Date.UTC(year, month - 1, day));
-            }
+  if (typeof serial === "string") {
+    const cleaned = serial.trim();
+    if (cleaned.includes("/") || cleaned.includes("-")) {
+      const parts = cleaned.split(/[/\-]/);
+      if (parts.length === 3) {
+        let d = parseInt(parts[0], 10),
+          m = parseInt(parts[1], 10),
+          y = parseInt(parts[2], 10);
+        if (y < 100) y += 2000;
+        if (m > 12) {
+          const t = d;
+          d = m;
+          m = t;
         }
+        const date = new Date(y, m - 1, d);
+        return isNaN(date.getTime()) ? null : date;
+      }
     }
-    if (typeof dateInput === 'number' && dateInput > 0) {
-        return new Date(Math.round((dateInput - 25569) * 86400 * 1000));
+    if (/^\d+$/.test(cleaned)) serial = parseInt(cleaned, 10);
+    else return null;
+  }
+
+  if (typeof serial !== "number" || serial < 1) return null;
+  const dateInfo = new Date((serial - 25569) * 86400 * 1000);
+  return new Date(dateInfo.getUTCFullYear(), dateInfo.getUTCMonth(), dateInfo.getUTCDate());
+}
+
+function getStatusDetails(status: string) {
+  const upperStatus = (status || "PENDENTE").toUpperCase();
+  switch (upperStatus) {
+    case "ENTREGUE":
+      return { icon: "fa-check-circle", pillBg: "bg-green-100 dark:bg-green-900/50", pillText: "text-green-700 dark:text-green-300" };
+    case "A CAMINHO":
+      return { icon: "fa-truck", pillBg: "bg-yellow-100 dark:bg-yellow-900/50", pillText: "text-yellow-700 dark:text-yellow-300" };
+    case "ADIADO":
+      return { icon: "fa-calendar-alt", pillBg: "bg-blue-100 dark:bg-blue-900/50", pillText: "text-blue-700 dark:text-blue-300" };
+    case "CANCELADO":
+      return { icon: "fa-times-circle", pillBg: "bg-red-100 dark:bg-red-900/50", pillText: "text-red-700 dark:text-red-300" };
+    default:
+      return { icon: "fa-hourglass-half", pillBg: "bg-slate-200 dark:bg-slate-700", pillText: "text-slate-700 dark:text-slate-200" };
+  }
+}
+
+function getStatusPill(status: string): string {
+  const upperStatus = (status || "PENDENTE").toUpperCase();
+  const details = getStatusDetails(upperStatus);
+  return `<span class="status-pill ${details.pillBg} ${details.pillText}">
+    <i class="fas ${details.icon} fa-fw"></i>
+    <span>${t(statusKeyMap[upperStatus] || "STATUS_PENDENTE")}</span>
+  </span>`;
+}
+
+// --- UI CORE ---
+function resetUI() {
+  placeholder.classList.remove("hidden");
+  deliveryDashboard.classList.add("hidden");
+  summaryStats.classList.add("hidden");
+  exportExcelBtn.classList.add("hidden");
+  exportPdfBtn.classList.add("hidden");
+  deliveryTabs.innerHTML = "";
+  deliveryContent.innerHTML = "";
+  lastUpdate.textContent = t("uploadPrompt");
+}
+
+function applyFiltersAndRender(activeTabId: string | null = null) {
+  const query = (searchInput.value || "").trim().toLowerCase();
+  let filteredData = deliveryData;
+
+  if (activeStatusFilter) {
+    if (activeStatusFilter === "PENDENTE") {
+      filteredData = filteredData.filter((row) => {
+        const status = String(row["STATUS"] || "").toUpperCase();
+        return !["ENTREGUE", "A CAMINHO", "ADIADO", "CANCELADO"].includes(status);
+      });
+    } else {
+      filteredData = filteredData.filter((row) => String(row["STATUS"] || "").toUpperCase() === activeStatusFilter);
     }
-    throw new Error(`Invalid date format: ${dateInput}`);
+  }
+
+  if (query) {
+    filteredData = filteredData.filter((row) => Object.values(row).some((value) => String(value).toLowerCase().includes(query)));
+  }
+
+  renderDeliveryDashboard(filteredData, activeTabId);
+  updateStats();
 }
 
-// --- DATA PROCESSING ---
-function processData(data: any[]): ContainerData[] {
-    const processed = data
-        .filter(row => {
-            const container = String(row.Container || '').trim();
-            if (!container || container.toLowerCase() === '(vazio)') return false;
+function updateStats() {
+  const total = deliveryData.length;
+  const delivered = deliveryData.filter((d) => String(d["STATUS"] || "").toUpperCase() === "ENTREGUE").length;
+  const inTransit = deliveryData.filter((d) => String(d["STATUS"] || "").toUpperCase() === "A CAMINHO").length;
+  const postponed = deliveryData.filter((d) => String(d["STATUS"] || "").toUpperCase() === "ADIADO").length;
+  const canceled = deliveryData.filter((d) => String(d["STATUS"] || "").toUpperCase() === "CANCELADO").length;
+  const pending = total - delivered - inTransit - postponed - canceled;
 
-            const dischargeDate = String(row['Discharge Date'] || '').trim();
-            const endOfFreeTime = String(row['End of Free Time'] || '').trim();
+  const getCardClasses = (cardStatus: string | null) => {
+    const isAll = cardStatus === "ALL";
+    const isActive = activeStatusFilter === cardStatus || (activeStatusFilter === null && isAll);
+    let classes =
+      "summary-card bg-white dark:bg-slate-800 p-5 rounded-lg shadow-sm border flex items-center cursor-pointer transition-all duration-200";
+    if (isActive) classes += " border-blue-500 ring-2 ring-blue-500/50 scale-[1.02] z-10";
+    else classes += " border-slate-200 dark:border-slate-700 hover:border-blue-300";
+    return classes;
+  };
 
-            const hasValidDischargeDate = dischargeDate && dischargeDate.toLowerCase() !== '(vazio)';
-            const hasValidEndOfFreeTime = endOfFreeTime && endOfFreeTime.toLowerCase() !== '(vazio)';
-            
-            return hasValidDischargeDate || hasValidEndOfFreeTime;
-        })
-        .map((row: any): ContainerData | null => {
-            try {
-                const dischargeDate = row['Discharge Date'] ? parseDate(row['Discharge Date']) : null;
-                const freeDays = parseInt(row['Free Days'], 10) || 0;
+  summaryStats.innerHTML = `
+    <div class="${getCardClasses("ALL")}" data-status="ALL">
+      <div class="bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full h-12 w-12 flex items-center justify-center mr-4 flex-shrink-0">
+        <i class="fas fa-box-open text-xl"></i>
+      </div>
+      <div>
+        <div class="text-slate-500 dark:text-slate-400 text-sm font-medium">${t("totalContainers")}</div>
+        <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100">${total}</div>
+      </div>
+    </div>
 
-                let endOfFreeTime: Date;
-                if (row['End of Free Time']) {
-                    endOfFreeTime = parseDate(row['End of Free Time']);
-                } else if (dischargeDate) {
-                    endOfFreeTime = new Date(dischargeDate.getTime());
-                    endOfFreeTime.setUTCDate(dischargeDate.getUTCDate() + freeDays);
-                } else {
-                    console.error(`Skipping row, cannot determine end of free time for container ${row.Container}`);
-                    return null;
-                }
-                
-                let hasDateError = false;
-                const dischargeYear = dischargeDate ? dischargeDate.getUTCFullYear() : 0;
-                const endOfFreeTimeYear = endOfFreeTime ? endOfFreeTime.getUTCFullYear() : 0;
-                if (dischargeYear < 1950 || (endOfFreeTimeYear > 0 && endOfFreeTimeYear < 1950)) {
-                    hasDateError = true;
-                }
+    <div class="${getCardClasses("ENTREGUE")}" data-status="ENTREGUE">
+      <div class="bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-full h-12 w-12 flex items-center justify-center mr-4 flex-shrink-0">
+        <i class="fas fa-check-circle text-xl"></i>
+      </div>
+      <div>
+        <div class="text-slate-500 dark:text-slate-400 text-sm font-medium">${t("delivered")}</div>
+        <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100">${delivered}</div>
+      </div>
+    </div>
 
-                const statusDepot = String(row['Status Depot'] || '').trim().toUpperCase();
-                const actualReturnDateValue = row['Return Date'];
-                let returnDate: Date | undefined = undefined;
+    <div class="${getCardClasses("A CAMINHO")}" data-status="A CAMINHO">
+      <div class="bg-yellow-100 dark:bg-yellow-900/50 text-yellow-600 dark:text-yellow-400 rounded-full h-12 w-12 flex items-center justify-center mr-4 flex-shrink-0">
+        <i class="fas fa-truck text-xl"></i>
+      </div>
+      <div>
+        <div class="text-slate-500 dark:text-slate-400 text-sm font-medium">${t("inTransit")}</div>
+        <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100">${inTransit}</div>
+      </div>
+    </div>
 
-                if (statusDepot === 'ENTREGUE' && actualReturnDateValue) {
-                    try {
-                        returnDate = parseDate(actualReturnDateValue);
-                    } catch {
-                        console.warn(`Container ${row.Container} has status ENTREGUE but invalid return date. Treating as active.`);
-                        returnDate = undefined;
-                    }
-                }
-                
-                const today = new Date();
-                const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-                
-                let demurrageDays = 0;
-                const effectiveDate = returnDate || todayUTC; 
+    <div class="${getCardClasses("PENDENTE")}" data-status="PENDENTE">
+      <div class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full h-12 w-12 flex items-center justify-center mr-4 flex-shrink-0">
+        <i class="fas fa-hourglass-half text-xl"></i>
+      </div>
+      <div>
+        <div class="text-slate-500 dark:text-slate-400 text-sm font-medium">${t("pending")}</div>
+        <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100">${pending}</div>
+      </div>
+    </div>
 
-                if (effectiveDate > endOfFreeTime) {
-                    const diffTime = effectiveDate.getTime() - endOfFreeTime.getTime();
-                    demurrageDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-                }
-                
-                const shipowner = String(row['Shipowner'] || 'DEFAULT').trim().toUpperCase();
-                const rate = appState.demurrageRates[shipowner] || appState.demurrageRates.default;
-                const demurrageCost = demurrageDays * rate;
-                
-                return {
-                    'PO': String(row['PO'] || ''),
-                    'Vessel': String(row['Vessel'] || ''),
-                    'Container': String(row['Container']),
-                    'Discharge Date': dischargeDate,
-                    'Free Days': freeDays,
-                    'Return Date': returnDate,
-                    'End of Free Time': endOfFreeTime,
-                    'Final Status': String(row['Final Status'] || 'IN-TRANSIT'),
-                    'Loading Type': String(row['Loading Type'] || 'N/A'),
-                    'Cargo Type': String(row['Cargo Type'] || 'N/A'),
-                    'Shipowner': String(row['Shipowner'] || 'N/A'),
-                    'Demurrage Days': demurrageDays,
-                    'Demurrage Cost': demurrageCost,
-                    hasDateError,
-                };
+    <div class="${getCardClasses("ADIADO")}" data-status="ADIADO">
+      <div class="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full h-12 w-12 flex items-center justify-center mr-4 flex-shrink-0">
+        <i class="fas fa-calendar-alt text-xl"></i>
+      </div>
+      <div>
+        <div class="text-slate-500 dark:text-slate-400 text-sm font-medium">${t("postponed")}</div>
+        <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100">${postponed}</div>
+      </div>
+    </div>
 
-            } catch (error) {
-                console.error(`Error processing row for container ${row.Container}:`, error);
-                return null;
-            }
-        })
-        .filter((item): item is ContainerData => item !== null);
-
-    return processed;
+    <div class="${getCardClasses("CANCELADO")}" data-status="CANCELADO">
+      <div class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full h-12 w-12 flex items-center justify-center mr-4 flex-shrink-0">
+        <i class="fas fa-times-circle text-xl"></i>
+      </div>
+      <div>
+        <div class="text-slate-500 dark:text-slate-400 text-sm font-medium">${t("canceled")}</div>
+        <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100">${canceled}</div>
+      </div>
+    </div>
+  `;
 }
 
-const handleFileUpload = async (event: Event) => {
-    loadingOverlay.classList.remove('hidden');
-    const file = (event.target as HTMLInputElement).files?.[0];
-    if (!file) {
-        loadingOverlay.classList.add('hidden');
-        return;
-    }
+function renderDeliveryDashboard(data: any[], activeTabId: string | null = null) {
+  placeholder.classList.add("hidden");
+  deliveryDashboard.classList.remove("hidden");
+  summaryStats.classList.remove("hidden");
+  exportExcelBtn.classList.remove("hidden");
+  exportPdfBtn.classList.remove("hidden");
 
-    const reader = new FileReader();
-    reader.onload = async (e: ProgressEvent<FileReader>) => {
-        try {
-            const data = e.target?.result;
-            const workbook = XLSX.read(data, { type: 'binary' });
-            const sheetName = workbook.SheetNames[0];
-            const sheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  deliveryTabs.innerHTML = "";
+  deliveryContent.innerHTML = "";
 
-            if (jsonData.length < 2) {
-                throw new Error("Spreadsheet is empty or has no data rows.");
-            }
+  if (data.length === 0) {
+    deliveryTabs.classList.add("hidden");
+    deliveryContent.innerHTML = `
+      <div class="text-center py-20 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+        <i class="fas fa-search text-6xl text-slate-300 dark:text-slate-600 mb-4"></i>
+        <h2 class="text-2xl font-semibold text-slate-700 dark:text-slate-200">${t("noResultsTitle")}</h2>
+        <p class="text-slate-500 dark:text-slate-400 mt-2">${t("noResultsMessage")}</p>
+      </div>`;
+    return;
+  }
 
-            const headers: string[] = jsonData[0];
-            const rows = jsonData.slice(1);
+  deliveryTabs.classList.remove("hidden");
 
-            const columnMapping: {[key: string]: string} = {
-                'CNTRS ORIGINAL': 'Container',
-                'PO SAP': 'PO',
-                'ARRIVAL VESSEL': 'Vessel',
-                'ATA': 'Discharge Date',
-                'FREE TIME': 'Free Days',
-                'DEADLINE RETURN CNTR': 'End of Free Time',
-                'STATUS CNTR WAREHOUSE': 'Final Status',
-                'LOADING TYPE': 'Loading Type',
-                'TYPE OF CARGO': 'Cargo Type',
-                'SHIPOWNER': 'Shipowner',
-                'ACTUAL DEPOT RETURN DATE': 'Return Date',
-                'STATUS': 'Status Depot'
-            };
-            
-            const headerMap: {[key: string]: string} = {};
-            headers.forEach(header => {
-                for (const mapKey in columnMapping) {
-                    if (String(header).trim().toUpperCase() === mapKey.toUpperCase()) {
-                        headerMap[header] = columnMapping[mapKey];
-                    }
-                }
-            });
+  const groupedByDate = data.reduce((acc, row) => {
+    const dateStr = String(row["DELIVERY AT BYD"] || "").trim();
+    const jsDate = excelDateToJSDate(dateStr);
+    const finalKey = jsDate ? jsDate.toLocaleDateString("en-US") : dateStr || t("undefinedDate");
+    if (!acc[finalKey]) acc[finalKey] = [];
+    acc[finalKey].push(row);
+    return acc;
+  }, {} as Record<string, any[]>);
 
-            const mappedData = rows.map(rowArray => {
-                const newRow: { [key: string]: any } = {};
-                headers.forEach((header, index) => {
-                    const mappedKey = headerMap[header] || header.trim();
-                    newRow[mappedKey] = rowArray[index];
-                });
-                return newRow;
-            });
-            
-            if (appState.allData.length > 0) {
-                saveHistorySnapshot(lastUpdateEl.dataset.fileName || 'Previous Data');
-            }
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+    if (a === t("undefinedDate")) return 1;
+    if (b === t("undefinedDate")) return -1;
+    const dA = new Date(a);
+    const dB = new Date(b);
+    return dA.getTime() - dB.getTime();
+  });
 
-            appState.allData = processData(mappedData);
-            
-            if (appState.allData.length === 0) {
-                showToast(translate('toast_no_data'), 'error');
-                return;
-            }
-            
-            appState.paidStatuses = {}; // Reset paid statuses on new upload
-            lastUpdateEl.dataset.fileName = file.name;
+  sortedDates.forEach((dateKey, index) => {
+    const deliveries = groupedByDate[dateKey];
+    const dateObj = new Date(dateKey);
+    const formattedDate = isNaN(dateObj.getTime())
+      ? dateKey
+      : dateObj.toLocaleDateString(currentLanguage, { day: "2-digit", month: "2-digit", year: "2-digit" });
 
-            await saveStateToFirebase(); // This will save and trigger onSnapshot for all clients
-            
-            showToast(translate('toast_data_loaded'), 'success');
-        } catch (error) {
-            console.error(error);
-            showToast(`${translate('toast_error_processing')}: ${error.message}`, 'error');
-        } finally {
-            // Let the onSnapshot handler hide the loading overlay
-            (event.target as HTMLInputElement).value = ''; // Reset file input
-        }
-    };
-    reader.readAsBinaryString(file);
-};
+    const contentId = `content-${index}`;
+    const isActive = activeTabId ? contentId === activeTabId : index === 0;
 
-// --- RENDER FUNCTIONS ---
-function renderDashboard() {
-    if (appState.allData.length === 0) {
-        resetToInitialState();
-        return;
-    }
-    mainContentArea.classList.remove('hidden');
-    placeholder.classList.add('hidden');
-    filterContainer.classList.remove('hidden');
-    historyBtn.classList.remove('hidden');
-    settingsBtn.classList.remove('hidden');
-    clearDataBtn.classList.remove('hidden');
-    aiInsightsBtn.classList.remove('hidden');
+    const tabBtn = document.createElement("button");
+    tabBtn.className = `tab-btn flex-shrink-0 px-4 py-3 text-sm font-semibold transition-colors duration-200 flex items-center space-x-2 ${
+      isActive ? "active" : ""
+    }`;
+    tabBtn.innerHTML = `<span class="font-bold">${formattedDate}</span> 
+      <span class="tab-count-badge bg-slate-200 dark:bg-slate-700 dark:text-slate-200 text-slate-600 font-bold">${deliveries.length}</span>`;
+    tabBtn.dataset.target = contentId;
+    deliveryTabs.appendChild(tabBtn);
 
-    applyFilters(); // Apply current filters to potentially new data
+    const card = document.createElement("div");
+    card.id = contentId;
+    card.className = `date-card bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 ${!isActive ? "hidden" : ""}`;
 
-    populateFilters();
-    updateKPIs();
-    renderColumns();
-    renderPaidDemurrageTable();
-    createOrUpdateCharts();
-    translateApp();
-}
+    const deliveredInCard = deliveries.filter((d) => String(d["STATUS"] || "").toUpperCase() === "ENTREGUE").length;
+    const totalInCard = deliveries.length;
+    const percentage = totalInCard > 0 ? (deliveredInCard / totalInCard) * 100 : 0;
 
-function updateLastUpdate(fileName: string, date: Date) {
-    const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-    lastUpdateEl.innerHTML = `<span data-translate-key="upload_prompt_updated">${translate('upload_prompt_updated')}</span> ${fileName} em ${formattedDate}`;
-    lastUpdateEl.dataset.fileName = fileName;
-}
+    // Carrier breakdown
+    const carrierStats: Record<string, { total: number; delivered: number }> = {};
+    deliveries.forEach((d) => {
+      const carrier = String(d["TRANSPORTATION COMPANY"] || "N/A").trim();
+      if (!carrierStats[carrier]) carrierStats[carrier] = { total: 0, delivered: 0 };
+      carrierStats[carrier].total++;
+      if (String(d["STATUS"] || "").toUpperCase() === "ENTREGUE") carrierStats[carrier].delivered++;
+    });
 
+    const carrierBreakdownHTML = Object.entries(carrierStats)
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([carrier, stats]) => {
+        const carrierPercent = stats.total > 0 ? (stats.delivered / stats.total) * 100 : 0;
+        return `
+          <div class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-all hover:border-blue-300 dark:hover:border-blue-700">
+            <div class="flex justify-between items-start mb-2">
+              <span class="font-bold text-sm text-slate-700 dark:text-slate-200 truncate pr-2" title="${carrier}">${carrier}</span>
+              <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">${carrierPercent.toFixed(
+                0
+              )}%</span>
+            </div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-slate-500 dark:text-slate-400">${t("totalContainers")}: <strong class="text-slate-700 dark:text-slate-200">${
+                stats.total
+              }</strong></span>
+              <span class="text-xs text-slate-500 dark:text-slate-400">${t("delivered")}: <strong class="text-green-600 dark:text-green-400">${
+                stats.delivered
+              }</strong></span>
+            </div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-blue-500 h-full transition-all duration-700" style="width: ${carrierPercent}%"></div>
+            </div>
+          </div>`;
+      })
+      .join("");
 
-function resetToInitialState() {
-    appState.allData = [];
-    appState.filteredData = [];
-    appState.paidStatuses = {};
-    
-    mainContentArea.classList.add('hidden');
-    placeholder.classList.remove('hidden');
-    filterContainer.classList.add('hidden');
-    historyBtn.classList.add('hidden');
-    settingsBtn.classList.add('hidden');
-    clearDataBtn.classList.add('hidden');
-    aiInsightsBtn.classList.add('hidden');
-    
-    lastUpdateEl.innerHTML = `<span data-translate-key="upload_prompt_initial">${translate('upload_prompt_initial')}</span>`;
-    lastUpdateEl.removeAttribute('data-file-name');
-    destroyCharts();
-}
+    const tableRows = deliveries
+      .map((row, rowIndex) => {
+        const status = String(row["STATUS"] || "PENDENTE").toUpperCase();
+        const materialType = String(row["TYPE OF MATERIAL"] || "").toUpperCase();
+        const isBattery = materialType.includes("BATTERY") || materialType.includes("BATERIA");
 
+        let rowClass = "transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer";
+        if (isBattery) rowClass += " is-battery";
+        if (status === "ENTREGUE") rowClass += " bg-green-50/30 dark:bg-green-900/10 opacity-80";
 
-function populateFilters() {
-    const createOptions = (values: Set<string>): string => {
-        return Array.from(values).sort().map(value => `<option value="${value}">${value}</option>`).join('');
-    };
-    
-    const pos = new Set(appState.allData.map(d => d['PO']));
-    const vessels = new Set(appState.allData.map(d => d['Vessel']));
-    const containers = new Set(appState.allData.map(d => d['Container']));
-    const finalStatuses = new Set(appState.allData.map(d => d['Final Status']));
-    const loadingTypes = new Set(appState.allData.map(d => d['Loading Type']));
-    const cargoTypes = new Set(appState.allData.map(d => d['Cargo Type']));
-    const shipowners = new Set(appState.allData.map(d => d['Shipowner']));
+        const batteryBadge = isBattery
+          ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 uppercase"><i class="fas fa-bolt mr-1"></i>${t(
+              "badgeBattery"
+            )}</span>`
+          : "";
 
-    document.getElementById('po-filter')!.innerHTML = createOptions(pos);
-    document.getElementById('vessel-filter')!.innerHTML = createOptions(vessels);
-    document.getElementById('container-filter')!.innerHTML = createOptions(containers);
-    document.getElementById('final-status-filter')!.innerHTML = createOptions(finalStatuses);
-    document.getElementById('loading-type-filter')!.innerHTML = createOptions(loadingTypes);
-    document.getElementById('cargo-type-filter')!.innerHTML = createOptions(cargoTypes);
-    document.getElementById('shipowner-filter')!.innerHTML = createOptions(shipowners);
-}
+        const options = ["PENDENTE", "A CAMINHO", "ADIADO", "ENTREGUE", "CANCELADO"];
+        const selectHTML = `
+          <select class="status-select bg-white dark:bg-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-500 text-xs rounded-md p-1 w-full"
+                  data-original-index="${row.originalIndex}">
+            ${options
+              .map((opt) => `<option value="${opt}" ${status === opt ? "selected" : ""}>${t(statusKeyMap[opt])}</option>`)
+              .join("")}
+          </select>`;
 
-function updateKPIs() {
-    const today = new Date();
-    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-
-    const activeContainers = appState.filteredData.filter(d => !d['Return Date']);
-    
-    const demurrageCount = activeContainers.filter(d => d['Demurrage Days'] > 0 && !d.hasDateError).length;
-    const returnedLateCount = appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Days'] > 0).length;
-    const riskCount = activeContainers.filter(d => {
-        if (d.hasDateError) return false;
-        const diffTime = d['End of Free Time'].getTime() - todayUTC.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays >= 0 && diffDays <= 15;
-    }).length;
-    const returnedCount = appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Days'] === 0).length;
-    const totalCost = appState.filteredData.reduce((acc, d) => acc + (d['Demurrage Cost'] || 0), 0);
-    
-    document.getElementById('demurrage-count')!.textContent = demurrageCount.toString();
-    document.getElementById('returned-late-count')!.textContent = returnedLateCount.toString();
-    document.getElementById('risk-count')!.textContent = riskCount.toString();
-    document.getElementById('returned-count')!.textContent = returnedCount.toString();
-    document.getElementById('total-cost')!.textContent = formatCurrency(totalCost);
-}
-
-function renderColumns() {
-    const today = new Date();
-    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-
-    const activeContainers = appState.filteredData.filter(d => !d['Return Date']);
-
-    const dateIssueCol = document.querySelector('#col-date-issue .demurrage-column')!;
-    const demurrageCol = document.querySelector('#col-demurrage .demurrage-column')!;
-    const highRiskCol = document.querySelector('#col-high-risk .demurrage-column')!;
-    const mediumRiskCol = document.querySelector('#col-medium-risk .demurrage-column')!;
-    const lowRiskCol = document.querySelector('#col-low-risk .demurrage-column')!;
-
-    dateIssueCol.innerHTML = '';
-    demurrageCol.innerHTML = '';
-    highRiskCol.innerHTML = '';
-    mediumRiskCol.innerHTML = '';
-    lowRiskCol.innerHTML = '';
-
-    const containersWithDateIssues = activeContainers.filter(c => c.hasDateError);
-    const otherActiveContainers = activeContainers.filter(c => !c.hasDateError);
-
-    containersWithDateIssues
-        .sort((a, b) => a.Container.localeCompare(b.Container))
-        .forEach(container => {
-            const card = createContainerCard(container, 0, true);
-            dateIssueCol.appendChild(card);
-        });
-
-    otherActiveContainers
-        .sort((a, b) => b['Demurrage Days'] - a['Demurrage Days'])
-        .forEach(container => {
-            const diffTime = container['End of Free Time'].getTime() - todayUTC.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            const card = createContainerCard(container, diffDays);
-
-            if (diffDays < 0) {
-                demurrageCol.appendChild(card);
-            } else if (diffDays <= 15) {
-                highRiskCol.appendChild(card);
-            } else if (diffDays <= 30) {
-                mediumRiskCol.appendChild(card);
-            } else {
-                lowRiskCol.appendChild(card);
-            }
-        });
-}
-
-function createContainerCard(container: ContainerData, diffDays: number, isDateIssue = false): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'container-card p-3 space-y-2';
-    
-    let borderColor = 'border-green-500';
-    if (isDateIssue) {
-        borderColor = 'border-purple-500';
-    } else if (diffDays < 0) borderColor = 'border-red-500';
-    else if (diffDays <= 15) borderColor = 'border-orange-500';
-    else if (diffDays <= 30) borderColor = 'border-yellow-500';
-    card.classList.add(borderColor);
-
-    const statusHtml = isDateIssue ?
-        `<p class="font-bold text-purple-600" data-translate-key="card_status_invalid_date">${translate('card_status_invalid_date')}</p>` :
-        (diffDays < 0 ? 
-            `<p class="font-bold text-red-600">${container['Demurrage Days']} days late</p>` :
-            `<p class="font-bold text-green-600">${diffDays} days left</p>`
-        );
+        return `<tr class="${rowClass}" data-original-index="${row.originalIndex}">
+          <td class="px-4 py-3 text-xs text-center border-l-4 ${isBattery ? "border-amber-500" : "border-transparent"}">${rowIndex + 1}</td>
+          <td class="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100">${row["CONTAINER"] || "-"} ${batteryBadge}</td>
+          <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 font-mono">${row["BL"] || "-"}</td>
+          <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">${row["TRANSPORTATION COMPANY"] || "-"}</td>
+          <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">${row["VESSEL"] || "-"}</td>
+          <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">${row["BONDED WAREHOUSE"] || "-"}</td>
+          <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 font-medium">${row["LOT"] || "-"}</td>
+          <td class="px-4 py-3 text-xs">${status === "ENTREGUE" || status === "CANCELADO" ? getStatusPill(status) : selectHTML}</td>
+        </tr>`;
+      })
+      .join("");
 
     card.innerHTML = `
-        <div class="flex justify-between items-start">
-            <p class="font-bold text-sm text-gray-800 dark:text-slate-100">${container.Container}</p>
-            <p class="text-xs font-semibold px-2 py-0.5 rounded-full ${diffDays < 0 ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' : 'bg-gray-100 text-gray-800 dark:bg-slate-700 dark:text-slate-300'}">${container['Final Status']}</p>
+      <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">${formattedDate}</h3>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">${t("containersDelivered", deliveredInCard, totalInCard)}</span>
         </div>
-        <p class="text-xs text-gray-500 dark:text-slate-400">PO: <span class="font-medium text-gray-700 dark:text-slate-300">${container.PO}</span></p>
-        <p class="text-xs text-gray-500 dark:text-slate-400">Vessel: <span class="font-medium text-gray-700 dark:text-slate-300">${container.Vessel}</span></p>
-        <div class="flex justify-between text-xs pt-1">
-            <p class="text-gray-500 dark:text-slate-400">Deadline: <span class="font-bold text-gray-800 dark:text-slate-200">${formatDate(container['End of Free Time'])}</span></p>
-            ${statusHtml}
+        <div class="progress-bar"><div class="progress-bar-inner" style="width: ${percentage}%"></div></div>
+      </div>
+
+      <div class="p-4 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700">
+        <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center">
+          <i class="fas fa-chart-line mr-2 text-blue-500"></i> ${t("performanceTitle")}
+        </h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          ${carrierBreakdownHTML}
         </div>
-        ${container['Demurrage Cost'] > 0 ? `<p class="text-right text-xs font-bold text-red-600">Cost: ${formatCurrency(container['Demurrage Cost'])}</p>` : ''}
-    `;
+      </div>
 
-    card.addEventListener('click', () => openDetailsModal(container));
-    return card;
-}
-
-// --- FILTERING LOGIC ---
-function applyFilters() {
-    const getSelectedOptions = (id: string): string[] => Array.from(document.getElementById(id)!.selectedOptions).map(o => o.value);
-    
-    const poFilter = getSelectedOptions('po-filter');
-    const vesselFilter = getSelectedOptions('vessel-filter');
-    const containerFilter = getSelectedOptions('container-filter');
-    const statusFilter = getSelectedOptions('final-status-filter');
-    const loadingTypeFilter = getSelectedOptions('loading-type-filter');
-    const cargoTypeFilter = getSelectedOptions('cargo-type-filter');
-    const shipownerFilter = getSelectedOptions('shipowner-filter');
-
-    const arrivalStartValue = (document.getElementById('arrival-start-date') as HTMLInputElement).value;
-    const arrivalStartDate = arrivalStartValue ? new Date(arrivalStartValue + 'T00:00:00.000Z') : null;
-    const arrivalEndValue = (document.getElementById('arrival-end-date') as HTMLInputElement).value;
-    const arrivalEndDate = arrivalEndValue ? new Date(arrivalEndValue + 'T23:59:59.999Z') : null;
-
-    const freetimeStartValue = (document.getElementById('freetime-start-date') as HTMLInputElement).value;
-    const freetimeStartDate = freetimeStartValue ? new Date(freetimeStartValue + 'T00:00:00.000Z') : null;
-    const freetimeEndValue = (document.getElementById('freetime-end-date') as HTMLInputElement).value;
-    const freetimeEndDate = freetimeEndValue ? new Date(freetimeEndValue + 'T23:59:59.999Z') : null;
-
-    appState.filteredData = appState.allData.filter(d => {
-        const arrivalDateMatch = (!arrivalStartDate || (d['Discharge Date'] && d['Discharge Date'] >= arrivalStartDate)) &&
-                                   (!arrivalEndDate || (d['Discharge Date'] && d['Discharge Date'] <= arrivalEndDate));
-    
-        const freetimeDateMatch = (!freetimeStartDate || d['End of Free Time'] >= freetimeStartDate) &&
-                                    (!freetimeEndDate || d['End of Free Time'] <= freetimeEndDate);
-
-        return (poFilter.length === 0 || poFilter.includes(d.PO)) &&
-               (vesselFilter.length === 0 || vesselFilter.includes(d.Vessel)) &&
-               (containerFilter.length === 0 || containerFilter.includes(d.Container)) &&
-               (statusFilter.length === 0 || statusFilter.includes(d['Final Status'])) &&
-               (loadingTypeFilter.length === 0 || loadingTypeFilter.includes(d['Loading Type'])) &&
-               (cargoTypeFilter.length === 0 || cargoTypeFilter.includes(d['Cargo Type'])) &&
-               (shipownerFilter.length === 0 || shipownerFilter.includes(d.Shipowner)) &&
-               arrivalDateMatch &&
-               freetimeDateMatch;
-    });
-
-    globalSearch((document.getElementById('global-search-input') as HTMLInputElement).value);
-    renderDashboard();
-}
-
-// ... (The rest of the functions like modals, charts, etc., remain largely the same)
-// ... I will now paste the rest of the file, with modifications integrated.
-
-function resetFilters() {
-    const selects = filterContainer.querySelectorAll('select');
-    selects.forEach(s => {
-        s.selectedIndex = -1;
-        const searchInput = document.getElementById(`${s.id.replace('-filter', '-search-input')}`);
-        if(searchInput) (searchInput as HTMLInputElement).value = '';
-    });
-    
-    (document.getElementById('arrival-start-date') as HTMLInputElement).value = '';
-    (document.getElementById('arrival-end-date') as HTMLInputElement).value = '';
-    (document.getElementById('freetime-start-date') as HTMLInputElement).value = '';
-    (document.getElementById('freetime-end-date') as HTMLInputElement).value = '';
-
-    appState.filteredData = appState.allData;
-    (document.getElementById('global-search-input') as HTMLInputElement).value = '';
-    renderDashboard();
-}
-
-function setupFilterSearch() {
-    ['vessel', 'container', 'shipowner'].forEach(filterName => {
-        const searchInput = document.getElementById(`${filterName}-search-input`) as HTMLInputElement;
-        const select = document.getElementById(`${filterName}-filter`) as HTMLSelectElement;
-        
-        searchInput.addEventListener('input', () => {
-            const searchTerm = searchInput.value.toLowerCase();
-            Array.from(select.options).forEach(option => {
-                const text = option.textContent?.toLowerCase() || '';
-                option.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
-        });
-    });
-}
-
-function globalSearch(term: string) {
-    if (!term) {
-        return;
-    }
-    const lowerTerm = term.toLowerCase();
-    appState.filteredData = appState.filteredData.filter(d => {
-        return Object.values(d).some(val => 
-            String(val).toLowerCase().includes(lowerTerm)
-        );
-    });
-}
-
-// --- MODAL FUNCTIONS ---
-function setupModals() {
-    const allModals = document.querySelectorAll('.modal');
-    allModals.forEach(modal => {
-        const closeBtn = modal.querySelector('.modal-content-wrapper ~ button, [id$="-close-btn"]');
-        
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal(modal.id);
-            }
-        });
-
-        if(closeBtn) {
-            closeBtn.addEventListener('click', () => closeModal(modal.id));
-        }
-    });
-}
-
-function openModal(id: string) {
-    const modal = document.getElementById(id);
-    if(modal) {
-      modal.classList.remove('hidden');
-      setTimeout(() => modal.classList.add('modal-open'), 10);
-    }
-}
-
-function closeModal(id: string) {
-    const modal = document.getElementById(id);
-    if(modal) {
-      modal.classList.remove('modal-open');
-      setTimeout(() => modal.classList.add('hidden'), 300);
-    }
-}
-
-function openDetailsModal(container: ContainerData) {
-    const header = document.getElementById('modal-header-content')!;
-    header.innerHTML = `
-        <h2 class="text-2xl font-bold text-gray-800 dark:text-slate-100">${container.Container}</h2>
-        <p class="text-sm text-gray-500 dark:text-slate-400">PO: ${container.PO} / Navio: ${container.Vessel}</p>
-    `;
-
-    const detailsContent = document.getElementById('modal-details-content')!;
-    const reportArea = document.getElementById('justification-report-area')!;
-    reportArea.innerHTML = ''; // Clear previous report content
-
-    const today = new Date();
-    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const diffTime = container['End of Free Time'].getTime() - todayUTC.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    detailsContent.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="md:col-span-2 space-y-4">
-                <h3 class="font-bold text-lg text-gray-700 dark:text-slate-200 border-b pb-2">Detalhes Operacionais</h3>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                    <div><p class="text-gray-500 dark:text-slate-400">Armador</p><p class="font-semibold text-gray-800 dark:text-slate-100">${container.Shipowner}</p></div>
-                    <div><p class="text-gray-500 dark:text-slate-400">Status Final</p><p class="font-semibold text-gray-800 dark:text-slate-100">${container['Final Status']}</p></div>
-                    <div><p class="text-gray-500 dark:text-slate-400">Tipo de Carga</p><p class="font-semibold text-gray-800 dark:text-slate-100">${container['Cargo Type']}</p></div>
-                    <div><p class="text-gray-500 dark:text-slate-400">Tipo de Carregamento</p><p class="font-semibold text-gray-800 dark:text-slate-100">${container['Loading Type']}</p></div>
-                </div>
-                <h3 class="font-bold text-lg text-gray-700 dark:text-slate-200 border-b pb-2 pt-4">Datas Relevantes</h3>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                    <div><p class="text-gray-500 dark:text-slate-400">Data de Descarga</p><p class="font-semibold text-gray-800 dark:text-slate-100">${formatDate(container['Discharge Date'])}</p></div>
-                    <div><p class="text-gray-500 dark:text-slate-400">Dias Livres</p><p class="font-semibold text-gray-800 dark:text-slate-100">${container['Free Days']}</p></div>
-                    <div><p class="text-gray-500 dark:text-slate-400">Fim do Tempo Livre</p><p class="font-semibold text-gray-800 dark:text-slate-100">${formatDate(container['End of Free Time'])}</p></div>
-                    <div><p class="text-gray-500 dark:text-slate-400">Data de Devolução</p><p class="font-semibold text-gray-800 dark:text-slate-100">${formatDate(container['Return Date'])}</p></div>
-                </div>
-            </div>
-            <div class="space-y-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
-                <h3 class="font-bold text-lg text-gray-700 dark:text-slate-200 border-b pb-2">Análise de Demurrage</h3>
-                <div class="text-center">
-                      <p class="text-6xl font-extrabold ${container['Demurrage Cost'] > 0 ? 'text-red-500' : 'text-green-500'}">${formatCurrency(container['Demurrage Cost'])}</p>
-                      <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Custo de Demurrage</p>
-                </div>
-                <div class="text-center">
-                      <p class="text-4xl font-bold ${container['Demurrage Days'] > 0 ? 'text-red-500' : 'text-green-500'}">${container['Demurrage Days']}</p>
-                      <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Dias de Demurrage</p>
-                </div>
-                <div class="text-center">
-                      <p class="text-2xl font-bold ${diffDays < 0 ? 'text-red-500' : 'text-green-500'}">${diffDays < 0 ? `${Math.abs(diffDays)} dias atrasado` : `${diffDays} dias restantes`}</p>
-                      <p class="text-sm font-medium text-gray-600 dark:text-slate-300">Status Atual</p>
-                </div>
-            </div>
-        </div>
-    `;
-
-    if (container['Demurrage Cost'] > 0) {
-        reportArea.innerHTML = `<button id="generate-report-btn" class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-indigo-700 font-semibold flex items-center justify-center">
-            <i class="fas fa-file-invoice-dollar mr-2"></i> <span data-translate-key="generate_report_btn">${translate('generate_report_btn')}</span>
-        </button>`;
-        document.getElementById('generate-report-btn')!.addEventListener('click', (e) => {
-            const button = e.currentTarget as HTMLButtonElement;
-            button.disabled = true;
-            generateDemurrageJustification(container);
-        });
-    }
-
-    openModal('details-modal');
-}
-
-
-function openListModal(category: string) {
-    let dataToList: ContainerData[] = [];
-    let title = '';
-    const today = new Date();
-    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const activeContainers = appState.filteredData.filter(d => !d['Return Date'] && !d.hasDateError);
-
-    switch (category) {
-        case 'demurrage':
-            title = 'Containers com Demurrage';
-            dataToList = activeContainers.filter(d => d['Demurrage Days'] > 0);
-            break;
-        case 'risk':
-            title = 'Containers em Risco (Vencimento em até 15 dias)';
-            dataToList = activeContainers.filter(d => {
-                const diffTime = d['End of Free Time'].getTime() - todayUTC.getTime();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                return diffDays >= 0 && diffDays <= 15;
-            });
-            break;
-        case 'returned':
-            title = 'Containers Devolvidos no Prazo';
-            dataToList = appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Days'] === 0);
-            break;
-    }
-
-    document.getElementById('list-modal-title')!.textContent = title;
-    renderListModalTable(dataToList);
-    
-    const filterInput = document.getElementById('list-modal-filter') as HTMLInputElement;
-    filterInput.value = '';
-    filterInput.oninput = () => {
-        const term = filterInput.value.toLowerCase();
-        const filtered = dataToList.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(term)));
-        renderListModalTable(filtered);
-    };
-
-    openModal('list-modal');
-}
-
-function renderListModalTable(data: ContainerData[]) {
-    const body = document.getElementById('list-modal-body')!;
-    if (data.length === 0) {
-        body.innerHTML = '<p class="text-center text-gray-500 dark:text-slate-400">Nenhum container para exibir.</p>';
-        return;
-    }
-    
-    const { key, direction } = appState.currentSort;
-
-    const tableHeaders = [
-        { key: 'Container', label: 'Container' },
-        { key: 'PO', label: 'PO' },
-        { key: 'Vessel', label: 'Navio' },
-        { key: 'End of Free Time', label: 'Deadline' },
-        { key: 'Demurrage Days', label: 'Dias Demurrage' },
-        { key: 'Demurrage Cost', label: 'Custo' },
-        { key: 'Shipowner', label: 'Armador' },
-    ];
-    
-    const headerHtml = tableHeaders.map(h => {
-        const isSorted = h.key === key;
-        const sortClass = isSorted ? (direction === 'asc' ? 'sorted-asc' : 'sorted-desc') : '';
-        return `<th data-sort-key="${h.key}" class="${sortClass}">${h.label}</th>`;
-    }).join('');
-
-    const sortedData = [...data].sort((a, b) => {
-        if (direction === 'none') return 0;
-        
-        const valA = a[key];
-        const valB = b[key];
-
-        if (valA instanceof Date && valB instanceof Date) {
-            return direction === 'asc' ? valA.getTime() - b.getTime() : b.getTime() - valA.getTime();
-        }
-        if (typeof valA === 'number' && typeof valB === 'number') {
-            return direction === 'asc' ? valA - valB : valB - a;
-        }
-        if (typeof valA === 'string' && typeof valB === 'string') {
-            return direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        }
-        return 0;
-    });
-
-    const bodyHtml = sortedData.map(d => `
-        <tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50">
-            <td>${d.Container}</td>
-            <td>${d.PO}</td>
-            <td>${d.Vessel}</td>
-            <td>${formatDate(d['End of Free Time'])}</td>
-            <td class="font-semibold ${d['Demurrage Days'] > 0 ? 'text-red-500' : ''}">${d['Demurrage Days']}</td>
-            <td class="font-semibold ${d['Demurrage Cost'] > 0 ? 'text-red-500' : ''}">${formatCurrency(d['Demurrage Cost'])}</td>
-            <td>${d.Shipowner}</td>
-        </tr>
-    `).join('');
-
-    body.innerHTML = `
-      <div class="overflow-x-auto">
-        <table id="list-modal-table" class="data-table">
-            <thead><tr>${headerHtml}</tr></thead>
-            <tbody>${bodyHtml}</tbody>
-        </table>
-      </div>`;
-
-    document.querySelectorAll('#list-modal-table th[data-sort-key]').forEach(th => {
-        th.addEventListener('click', () => {
-            const newKey = th.getAttribute('data-sort-key')!;
-            if (key === newKey) {
-                appState.currentSort.direction = direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                appState.currentSort.key = newKey;
-                appState.currentSort.direction = 'desc';
-            }
-            renderListModalTable(data);
-        });
-    });
-}
-
-function openRatesModal() {
-    const body = document.getElementById('rates-modal-body')!;
-    const shipowners = ['default', ...Array.from(new Set(appState.allData.map(d => d.Shipowner.trim().toUpperCase())))];
-    
-    body.innerHTML = shipowners.filter(s => s && s !== 'N/A').map(owner => `
-        <div>
-            <label for="rate-${owner}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">${owner === 'default' ? 'Taxa Padrão (Default)' : owner}</label>
-            <input type="number" id="rate-${owner}" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 shadow-sm" value="${appState.demurrageRates[owner] || appState.demurrageRates.default}">
-        </div>
-    `).join('');
-    
-    openModal('rates-modal');
-}
-
-async function saveRates() {
-    const newRates = { ...appState.demurrageRates };
-    document.querySelectorAll('#rates-modal-body input[type="number"]').forEach(input => {
-        const id = input.id.replace('rate-', '');
-        const value = parseFloat((input as HTMLInputElement).value);
-        if (!isNaN(value)) {
-            newRates[id] = value;
-        }
-    });
-    appState.demurrageRates = newRates;
-
-    appState.allData.forEach(container => {
-        const shipowner = container.Shipowner.toUpperCase();
-        const rate = appState.demurrageRates[shipowner] || appState.demurrageRates.default;
-        container['Demurrage Cost'] = container['Demurrage Days'] * rate;
-    });
-
-    await saveStateToFirebase();
-    showToast(translate('toast_settings_saved'), 'success');
-    
-    closeModal('rates-modal');
-}
-
-
-// --- HISTORY MANAGEMENT ---
-function saveHistorySnapshot(fileName: string) {
-    const history: HistorySnapshot[] = JSON.parse(localStorage.getItem('demurrageHistory') || '[]');
-    
-    const snapshot: HistorySnapshot = {
-        timestamp: new Date().toISOString(),
-        fileName: fileName,
-        data: appState.allData,
-        rates: appState.demurrageRates,
-        paidStatuses: appState.paidStatuses
-    };
-
-    history.unshift(snapshot);
-    if (history.length > MAX_HISTORY_SNAPSHOTS) {
-        history.pop();
-    }
-    
-    localStorage.setItem('demurrageHistory', JSON.stringify(history));
-}
-
-function loadHistorySnapshot(timestamp: string) {
-    const history: HistorySnapshot[] = JSON.parse(localStorage.getItem('demurrageHistory') || '[]');
-    const snapshot = history.find(h => h.timestamp === timestamp);
-
-    if (snapshot) {
-        appState.allData = snapshot.data.map(d => {
-            const dischargeDate = d['Discharge Date'] ? new Date(d['Discharge Date']) : null;
-            const endOfFreeTime = new Date(d['End of Free Time']);
-            
-            let hasDateError = false;
-            if ((dischargeDate && dischargeDate.getUTCFullYear() < 1950) || (endOfFreeTime && endOfFreeTime.getUTCFullYear() < 1950)) {
-                hasDateError = true;
-            }
-
-            return {
-                ...d,
-                'Discharge Date': dischargeDate,
-                'End of Free Time': endOfFreeTime,
-                'Return Date': d['Return Date'] ? new Date(d['Return Date']) : undefined,
-                hasDateError,
-            };
-        });
-        appState.demurrageRates = snapshot.rates;
-        appState.paidStatuses = snapshot.paidStatuses;
-        
-        resetFilters();
-        
-        appState.isViewingHistory = true;
-        showHistoryBanner(snapshot.fileName, new Date(snapshot.timestamp));
-        closeModal('history-modal');
-        showToast(`${translate('toast_history_loaded')} ${snapshot.fileName}`, 'info');
-    }
-}
-
-function renderHistoryModal() {
-    const history: HistorySnapshot[] = JSON.parse(localStorage.getItem('demurrageHistory') || '[]');
-    const body = document.getElementById('history-modal-body')!;
-    
-    if (history.length === 0) {
-        body.innerHTML = '<p class="text-center text-gray-500 dark:text-slate-400">Nenhum histórico de upload encontrado.</p>';
-    } else {
-        body.innerHTML = history.map(h => `
-            <div class="p-3 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex justify-between items-center cursor-pointer" data-timestamp="${h.timestamp}">
-                <div>
-                    <p class="font-semibold text-gray-800 dark:text-slate-200">${h.fileName}</p>
-                    <p class="text-xs text-gray-500 dark:text-slate-400">Salvo em: ${new Date(h.timestamp).toLocaleString()}</p>
-                </div>
-                <i class="fas fa-history text-gray-400 dark:text-slate-500"></i>
-            </div>
-        `).join('');
-
-        body.querySelectorAll('[data-timestamp]').forEach(el => {
-            el.addEventListener('click', () => {
-                loadHistorySnapshot(el.getAttribute('data-timestamp')!);
-            });
-        });
-    }
-
-    openModal('history-modal');
-}
-
-function showHistoryBanner(fileName: string, timestamp: Date) {
-    historyBannerText.textContent = `Visualizando dados históricos: ${fileName} (${timestamp.toLocaleDateString()})`;
-    historyBanner.classList.remove('hidden');
-    document.body.classList.add('history-view');
-}
-
-function hideHistoryBanner() {
-    historyBanner.classList.add('hidden');
-    document.body.classList.remove('history-view');
-    appState.isViewingHistory = false;
-}
-
-function returnToLiveView() {
-    hideHistoryBanner();
-    location.reload(); // Simplest way to ensure a clean reload from Firebase
-}
-
-// --- PAID DEMURRAGE TAB ---
-async function handlePaidToggle(containerId, isChecked) {
-    appState.paidStatuses[containerId] = isChecked;
-    await saveStateToFirebase();
-}
-
-function renderPaidDemurrageTable() {
-    const container = document.getElementById('paid-demurrage-table-container')!;
-    const returnedWithCost = appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Cost'] > 0);
-
-    const totalCost = returnedWithCost.reduce((acc, d) => acc + d['Demurrage Cost'], 0);
-    const paidCost = returnedWithCost.filter(d => appState.paidStatuses[d.Container]).reduce((acc, d) => acc + d['Demurrage Cost'], 0);
-    document.getElementById('summary-total-cost')!.textContent = formatCurrency(totalCost);
-    document.getElementById('summary-paid-cost')!.textContent = formatCurrency(paidCost);
-    document.getElementById('summary-unpaid-cost')!.textContent = formatCurrency(totalCost - paidCost);
-
-    if (returnedWithCost.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-500 dark:text-slate-400 py-8">Nenhum container devolvido com demurrage para exibir.</p>';
-        return;
-    }
-
-    const tableRows = returnedWithCost.map(d => {
-        const isPaid = appState.paidStatuses[d.Container];
-        return `
-            <tr class="${isPaid ? 'paid' : ''}">
-                <td>${d.Container}</td>
-                <td>${d.PO}</td>
-                <td>${d.Vessel}</td>
-                <td>${formatDate(d['Return Date'])}</td>
-                <td>${d['Demurrage Days']}</td>
-                <td class="font-bold text-red-600">${formatCurrency(d['Demurrage Cost'])}</td>
-                <td>
-                    <div class="flex items-center">
-                        <input type="checkbox" id="paid-${d.Container}" class="toggle-checkbox hidden" data-container-id="${d.Container}" ${isPaid ? 'checked' : ''}>
-                        <label for="paid-${d.Container}" class="toggle-label relative inline-block bg-gray-300 dark:bg-gray-600 rounded-full cursor-pointer transition-colors duration-200 ease-in-out after:content-[''] after:absolute after:bg-white after:rounded-full after:transition-transform after:duration-200 after:ease-in-out"></label>
-                    </div>
-                </td>
+      <div class="table-responsive">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+              <th class="px-4 py-2 text-center text-slate-500 text-xs uppercase w-12">${t("tableHeaderRow")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderContainer")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderBL")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderCompany")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderVessel")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderWarehouse")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderLot")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase w-40">${t("tableHeaderStatus")}</th>
             </tr>
-        `;
-    }).join('');
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-700">${tableRows}</tbody>
+        </table>
+      </div>
+    `;
 
-    container.innerHTML = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>${translate('table_header_container')}</th>
-                    <th>${translate('table_header_po')}</th>
-                    <th>${translate('table_header_vessel')}</th>
-                    <th>${translate('table_header_return_date')}</th>
-                    <th>${translate('table_header_demurrage_days')}</th>
-                    <th>${translate('table_header_cost')}</th>
-                    <th>${translate('table_header_paid')}</th>
-                </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-        </table>`;
-    
-    container.querySelectorAll('.toggle-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const target = e.target as HTMLInputElement;
-            handlePaidToggle(target.dataset.containerId!, target.checked);
-        });
-    });
+    deliveryContent.appendChild(card);
+  });
 }
 
-// ... (Charts functions, AI functions, etc. remain the same)
-// --- ANALYTICS/CHARTS ---
-function destroyCharts() {
-    Object.values(appState.charts).forEach(chart => chart.destroy());
-    appState.charts = {};
-}
+// --- DETAILS EXPAND (kept from your original structure) ---
+function handleRowInteraction(row: HTMLTableRowElement) {
+  if (!row || row.classList.contains("details-row")) return;
 
-function createOrUpdateCharts() {
-    destroyCharts();
+  const table = row.closest("table");
+  if (!table) return;
 
-    const analyticsContent = document.getElementById('analytics-content')!;
-    const analyticsPlaceholder = document.getElementById('analytics-placeholder')!;
-    const isDark = document.documentElement.classList.contains('dark');
+  const currentlyExpandedRow = table.querySelector("tr.is-expanded") as HTMLTableRowElement | null;
+  const isAlreadyExpanded = row.classList.contains("is-expanded");
 
-    if(appState.filteredData.length === 0) {
-        analyticsContent.classList.add('hidden');
-        analyticsPlaceholder.classList.remove('hidden');
-        return;
+  if (currentlyExpandedRow) {
+    currentlyExpandedRow.classList.remove("is-expanded");
+    const existingDetails = currentlyExpandedRow.nextElementSibling as HTMLTableRowElement | null;
+    if (existingDetails && existingDetails.classList.contains("details-row")) {
+      const wrapper = existingDetails.querySelector(".details-content-wrapper") as HTMLDivElement | null;
+      if (wrapper) {
+        wrapper.classList.remove("expanded");
+        setTimeout(() => existingDetails.remove(), 350);
+      } else existingDetails.remove();
     }
-    analyticsContent.classList.remove('hidden');
-    analyticsPlaceholder.classList.add('hidden');
-    
-    Chart.register(ChartDataLabels);
+  }
 
-    const noDataPlugin = {
-      id: 'noData',
-      afterDraw: (chart: any) => {
-        if (chart.data.datasets.every((ds: any) => ds.data.length === 0 || ds.data.every((val: any) => val === 0))) {
-          const { ctx, chartArea: { left, top, right, bottom } } = chart;
-          ctx.save();
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = 'bold 16px Inter';
-          ctx.fillStyle = isDark ? '#64748b' : '#9ca3af';
-          ctx.fillText(translate('chart_no_data'), (left + right) / 2, (top + bottom) / 2);
-          ctx.restore();
+  if (!isAlreadyExpanded) {
+    row.classList.add("is-expanded");
+
+    const originalIndex = parseInt(row.dataset.originalIndex || "", 10);
+    const rowData = deliveryData[originalIndex];
+
+    const newDetailsRow = document.createElement("tr");
+    newDetailsRow.className = "details-row";
+
+    const detailsCell = document.createElement("td");
+    detailsCell.colSpan = 8;
+    detailsCell.className = "details-cell";
+
+    detailsCell.innerHTML = `
+      <div class="details-content-wrapper bg-slate-50 dark:bg-slate-900/50">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsCompany")}</label>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100">${rowData["TRANSPORTATION COMPANY"] || "-"}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsVessel")}</label>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100">${rowData["VESSEL"] || "-"}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsWarehouse")}</label>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100">${rowData["BONDED WAREHOUSE"] || "-"}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsLot")}</label>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100">${rowData["LOT"] || "-"}</p>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsMaterial")}</label>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100">${rowData["TYPE OF MATERIAL"] || "-"}</p>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsNotes")}</label>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100 italic">${rowData["NOTES"] || "-"}</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    newDetailsRow.appendChild(detailsCell);
+    row.after(newDetailsRow);
+
+    setTimeout(() => {
+      const wrapper = newDetailsRow.querySelector(".details-content-wrapper") as HTMLDivElement | null;
+      if (wrapper) wrapper.classList.add("expanded");
+    }, 10);
+  }
+}
+
+deliveryContent?.addEventListener("click", (event) => {
+  const target = event.target as HTMLElement;
+  const row = target.closest<HTMLTableRowElement>("tbody tr:not(.details-row)");
+  if (row && !target.closest(".status-select")) handleRowInteraction(row);
+});
+
+// --- STATUS CHANGE (with confirmation + Firebase sync) ---
+deliveryContent?.addEventListener("change", async (event) => {
+  const target = event.target as HTMLElement;
+  const select = target.closest<HTMLSelectElement>(".status-select");
+  if (!select) return;
+
+  const originalIndex = parseInt(select.dataset.originalIndex || "", 10);
+  if (Number.isNaN(originalIndex) || !deliveryData[originalIndex]) return;
+
+  const rowData = deliveryData[originalIndex];
+  const containerId = rowData["CONTAINER"] || rowData["BL"] || "";
+  const newStatus = String((select as HTMLSelectElement).value || "PENDENTE").toUpperCase();
+  const oldStatus = String(rowData["STATUS"] || "PENDENTE").toUpperCase();
+
+  if (newStatus === oldStatus) return;
+
+  const ok = await showConfirmationDialog(
+    t("confirmStatusChangeTitle"),
+    t("confirmStatusChangeMessage", containerId, newStatus)
+  );
+
+  if (!ok) {
+    (select as HTMLSelectElement).value = oldStatus;
+    return;
+  }
+
+  rowData["STATUS"] = newStatus;
+  showToast(t("statusUpdated", containerId, newStatus), "success");
+
+  // Persist to Firebase (and all users update via onSnapshot)
+  await saveStateToFirebase({ deliveryData });
+});
+
+// --- TABS CLICK ---
+deliveryTabs?.addEventListener("click", (event) => {
+  const btn = (event.target as HTMLElement).closest<HTMLButtonElement>(".tab-btn");
+  if (!btn) return;
+
+  const targetId = btn.dataset.target;
+  if (!targetId) return;
+
+  deliveryTabs.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+
+  deliveryContent.querySelectorAll<HTMLElement>(".date-card").forEach((card) => {
+    card.classList.toggle("hidden", card.id !== targetId);
+  });
+});
+
+// --- SEARCH ---
+searchInput?.addEventListener("input", () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = window.setTimeout(() => applyFiltersAndRender(), 250);
+});
+
+// --- SUMMARY FILTER CLICK ---
+summaryStats?.addEventListener("click", (event) => {
+  const card = (event.target as HTMLElement).closest<HTMLDivElement>("[data-status]");
+  if (!card || !card.dataset.status) return;
+
+  const status = card.dataset.status;
+  activeStatusFilter = status === "ALL" ? null : activeStatusFilter === status ? null : status;
+  applyFiltersAndRender();
+});
+
+// --- FILE UPLOAD -> parse -> set state -> save to firebase ---
+fileUpload?.addEventListener("change", (event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  const uploadLabel = document.querySelector('label[for="file-upload"]');
+  if (!file || !uploadLabel) return;
+
+  const labelSpan = uploadLabel.querySelector("span");
+  uploadLabel.classList.add("opacity-50", "cursor-not-allowed");
+  if (labelSpan) labelSpan.textContent = t("processing");
+  uploadLabel.querySelector("i")?.classList.add("fa-spin");
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      if (!e.target?.result) throw new Error(t("fileReadError"));
+
+      const workbook = XLSX.read(new Uint8Array(e.target.result as ArrayBuffer), { type: "array" });
+      const sheetName = findDeliverySheet(workbook);
+      const sheet = workbook.Sheets[sheetName];
+
+      const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+      // Find header row
+      let headerRowIndex = -1;
+      for (let i = 0; i < rawData.length; i++) {
+        const row = rawData[i].map((c) => String(c).toUpperCase().trim());
+        if (row.includes("CONTAINER") || row.includes("DELIVERY AT BYD")) {
+          headerRowIndex = i;
+          break;
         }
       }
-    };
+      if (headerRowIndex === -1) headerRowIndex = rawData.length > 7 ? 7 : 0;
 
-    const tooltipConfig = {
-        enabled: true,
-        backgroundColor: isDark ? '#334155' : '#1e293b',
-        titleColor: isDark ? '#e2e8f0' : '#ffffff',
-        bodyColor: isDark ? '#cbd5e1' : '#f1f5f9',
-        boxPadding: 8,
-        padding: 12,
-        cornerRadius: 8,
-        titleFont: { weight: 'bold', size: 14 },
-        bodyFont: { size: 12 },
-    };
+      const headers = rawData[headerRowIndex].map((h) => String(h).toUpperCase().trim());
+      const dataRows = rawData.slice(headerRowIndex + 1);
 
-    const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { 
-                labels: { color: isDark ? '#cbd5e1' : '#475569' } 
-            },
-            datalabels: {
-                color: isDark ? '#e2e8f0' : '#334155',
-                font: {
-                    weight: 'bold',
-                }
-            },
-            tooltip: tooltipConfig
-        },
-        scales: {
-            x: { 
-                ticks: { color: isDark ? '#94a3b8' : '#64748b' },
-                grid: { color: isDark ? '#334155' : '#e2e8f0' }
-            },
-            y: { 
-                ticks: { color: isDark ? '#94a3b8' : '#64748b' },
-                grid: { color: isDark ? '#334155' : '#e2e8f0' }
-            }
-        }
-    };
-    
-    const dataForCharts = appState.filteredData.filter(d => !d.hasDateError);
-    const returnedOnTime = dataForCharts.filter(d => d['Return Date'] && (d['Demurrage Days'] || 0) === 0);
-    const returnedLate = dataForCharts.filter(d => d['Return Date'] && (d['Demurrage Days'] || 0) > 0);
-    const activeLate = dataForCharts.filter(d => !d['Return Date'] && (d['Demurrage Days'] || 0) > 0);
-    const activeOnTime = dataForCharts.filter(d => !d['Return Date'] && (d['Demurrage Days'] || 0) === 0);
+      const mapping: Record<string, number> = {
+        "DELIVERY AT BYD": headers.indexOf("DELIVERY AT BYD"),
+        CONTAINER: headers.indexOf("CONTAINER"),
+        BL: headers.indexOf("BL"),
+        VESSEL: headers.indexOf("VESSEL"),
+        "BONDED WAREHOUSE": headers.indexOf("BONDED WAREHOUSE"),
+        "TYPE OF MATERIAL": headers.indexOf("TYPE OF MATERIAL"),
+        STATUS: headers.indexOf("STATUS"),
+        "TRANSPORTATION COMPANY": headers.indexOf("TRANSPORTATION COMPANY"),
+        LOT: headers.indexOf("LOT"),
+        NOTES: headers.indexOf("NOTES"),
+      };
 
-    const actualCost = returnedLate.reduce((sum, d) => sum + (d['Demurrage Cost'] || 0), 0);
-    const incurringCost = activeLate.reduce((sum, d) => sum + (d['Demurrage Cost'] || 0), 0);
-    
-    appState.charts.costAnalysis = new window.Chart(document.getElementById('costAnalysisChart')!.getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: [
-                translate('chart_label_actual_cost_returned'), 
-                translate('chart_label_incurred_cost_active')
-            ],
-            datasets: [{
-                data: [actualCost, incurringCost],
-                backgroundColor: ['#ef4444', '#f97316'],
-                barPercentage: 0.5,
-            }]
-        },
-        options: { 
-            ...chartOptions, 
-            plugins: { 
-                ...chartOptions.plugins, 
-                legend: { display: false },
-                datalabels: {
-                    ...chartOptions.plugins.datalabels,
-                    anchor: 'end',
-                    align: 'top',
-                    formatter: (value) => (value > 0 ? formatCurrency(value) : null),
-                },
-                tooltip: {
-                    ...tooltipConfig,
-                    callbacks: {
-                        title: (tooltipItems) => tooltipItems[0].label,
-                        label: (tooltipItem) => `${translate('tooltip_cost')}: ${formatCurrency(tooltipItem.raw as number || 0)}`
-                    }
-                }
-            } 
-        }
-    });
-    document.getElementById('cost-summary-text')!.textContent = translate('cost_summary_text', actualCost, incurringCost);
+      // Fallbacks
+      if (mapping.CONTAINER === -1) mapping.CONTAINER = 10;
+      if (mapping.BL === -1) mapping.BL = 11;
+      if (mapping.VESSEL === -1) mapping.VESSEL = 12;
+      if (mapping["BONDED WAREHOUSE"] === -1) mapping["BONDED WAREHOUSE"] = 13;
+      if (mapping["DELIVERY AT BYD"] === -1) mapping["DELIVERY AT BYD"] = 0;
+      if (mapping["TRANSPORTATION COMPANY"] === -1) mapping["TRANSPORTATION COMPANY"] = 3;
+      if (mapping.LOT === -1) mapping.LOT = 18;
 
-    const performanceData = [
-        returnedOnTime.length, 
-        returnedLate.length, 
-        activeLate.length, 
-        activeOnTime.length
-    ];
-    const totalContainersForChart = performanceData.reduce((a, b) => a + b, 0);
+      deliveryData = dataRows
+        .filter((row) => row[mapping.CONTAINER] || row[mapping.BL])
+        .map((row, idx) => ({
+          "DELIVERY AT BYD": row[mapping["DELIVERY AT BYD"]] || "",
+          CONTAINER: row[mapping.CONTAINER] || "",
+          BL: row[mapping.BL] || "",
+          VESSEL: row[mapping.VESSEL] || "",
+          "BONDED WAREHOUSE": row[mapping["BONDED WAREHOUSE"]] || "",
+          "TYPE OF MATERIAL": row[mapping["TYPE OF MATERIAL"]] || "",
+          "TRANSPORTATION COMPANY": row[mapping["TRANSPORTATION COMPANY"]] || "",
+          LOT: row[mapping.LOT] || "",
+          NOTES: row[mapping.NOTES] || "",
+          STATUS: row[mapping.STATUS] || "PENDENTE",
+          originalIndex: idx,
+        }));
 
-    appState.charts.operationalPerformance = new window.Chart(document.getElementById('operationalPerformanceChart')!.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-            labels: [
-                translate('chart_label_returned_on_time'),
-                translate('chart_label_returned_late'),
-                translate('chart_label_active_with_demurrage'),
-                translate('chart_label_active_in_free_period'),
-            ],
-            datasets: [{
-                data: performanceData,
-                backgroundColor: ['#22c55e', '#f97316', '#ef4444', '#3b82f6'],
-                borderColor: isDark ? '#1e293b' : '#ffffff',
-                borderWidth: 4,
-            }]
-        },
-        options: { 
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '70%',
-            plugins: { 
-                legend: { 
-                    position: 'bottom',
-                    labels: { 
-                        color: isDark ? '#cbd5e1' : '#475569',
-                        boxWidth: 12,
-                        padding: 20
-                    } 
-                },
-                datalabels: {
-                    formatter: (value, ctx) => {
-                        if (!value || value === 0) return null;
-                        const total = ctx.chart.data.datasets[0].data.reduce((a, b) => (a || 0) + (b || 0), 0);
-                        const percentage = (value / total) * 100;
-                        return percentage > 5 ? value : null;
-                    },
-                    color: '#fff',
-                    font: {
-                        weight: 'bold',
-                        size: 14
-                    }
-                },
-                tooltip: {
-                    ...tooltipConfig,
-                    callbacks: {
-                        title: (tooltipItems) => tooltipItems[0].label,
-                        label: (tooltipItem) => {
-                            const value = (tooltipItem.raw as number) || 0;
-                            const percentage = totalContainersForChart > 0 ? (value * 100 / totalContainersForChart).toFixed(1) + '%' : '0.0%';
-                            return `${value} ${translate('tooltip_containers')} (${percentage})`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-    const returnedOnTimePercentage = totalContainersForChart > 0 ? (returnedOnTime.length * 100 / totalContainersForChart).toFixed(1) : '0.0';
-    document.getElementById('performance-summary-text')!.textContent = translate('performance_donut_summary_text', returnedOnTimePercentage);
+      if (deliveryData.length === 0) throw new Error(t("emptySheetError"));
 
-    const allLateContainers = [...returnedLate, ...activeLate];
-    const costAndCountByShipowner = allLateContainers.reduce((acc, d) => {
-        const cost = d['Demurrage Cost'] || 0;
-        const shipowner = d.Shipowner;
-        if (cost > 0) {
-            if (!acc[shipowner]) {
-                acc[shipowner] = { totalCost: 0, count: 0 };
-            }
-            acc[shipowner].totalCost += cost;
-            acc[shipowner].count += 1;
-        }
-        return acc;
-    }, {});
-    
-    const sortedShipownersData = Object.entries(costAndCountByShipowner)
-        .map(([shipowner, data]) => ({ shipowner, ...data }))
-        .sort((a, b) => b.totalCost - a.totalCost)
-        .slice(0, 10);
-    
-    appState.charts.demurrageByShipowner = new window.Chart(document.getElementById('demurrageByShipownerChart')!.getContext('2d'), {
-        type: 'bar',
-        plugins: [noDataPlugin],
-        data: {
-            labels: sortedShipownersData.map(s => s.shipowner),
-            datasets: [{
-                label: 'Custo de Demurrage',
-                data: sortedShipownersData.map(s => s.totalCost),
-                backgroundColor: '#3b82f6',
-            }]
-        },
-        options: { ...chartOptions, plugins: { ...chartOptions.plugins, legend: { display: false }, datalabels: { 
-            ...chartOptions.plugins.datalabels,
-            anchor: 'end', 
-            align: 'top', 
-            formatter: (value) => {
-                if (!value || value === 0) return null;
-                return new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    notation: 'compact',
-                    compactDisplay: 'short',
-                    maximumFractionDigits: 1
-                }).format(value);
-            }
-        },
-            tooltip: {
-                ...tooltipConfig,
-                callbacks: {
-                    title: (tooltipItems) => tooltipItems[0].label,
-                    label: (tooltipItem) => `${translate('tooltip_cost')}: ${formatCurrency(tooltipItem.raw as number || 0)}`,
-                    afterLabel: (tooltipItem) => {
-                        const shipowner = tooltipItem.label;
-                        const originalData = sortedShipownersData.find(d => d.shipowner === shipowner);
-                        return originalData ? `${translate('tooltip_from')} ${originalData.count} ${translate('tooltip_containers')}` : '';
-                    }
-                }
-            }
-        } }
-    });
+      searchInput.value = "";
+      activeStatusFilter = null;
 
-    const daysByShipowner = allLateContainers.reduce((acc, d) => {
-        const days = d['Demurrage Days'] || 0;
-        if (days > 0) {
-            if (!acc[d.Shipowner]) {
-                acc[d.Shipowner] = { totalDays: 0, count: 0 };
-            }
-            acc[d.Shipowner].totalDays += days;
-            acc[d.Shipowner].count += 1;
-        }
-        return acc;
-    }, {});
+      lastUpdate.dataset.sheetName = sheetName;
+      lastUpdate.textContent = t("lastUpdateText", sheetName, new Date().toLocaleString(currentLanguage));
+      showToast(t("sheetLoaded"), "success");
 
-    const avgDaysData = Object.entries(daysByShipowner).map(([shipowner, data]) => ({
-        shipowner,
-        avgDays: data.totalDays / data.count,
-        count: data.count
-    })).sort((a, b) => b.avgDays - a.avgDays).slice(0, 10);
+      applyFiltersAndRender();
 
-    appState.charts.avgDaysByShipowner = new window.Chart(document.getElementById('avgDaysByShipownerChart')!.getContext('2d'), {
-        type: 'bar',
-        plugins: [noDataPlugin],
-        data: {
-            labels: avgDaysData.map(d => d.shipowner),
-            datasets: [{
-                label: 'Dias médios de demurrage',
-                data: avgDaysData.map(d => d.avgDays),
-                backgroundColor: '#8b5cf6',
-            }]
-        },
-        options: { ...chartOptions, indexAxis: 'y', plugins: { ...chartOptions.plugins, legend: { display: false }, datalabels: {
-            ...chartOptions.plugins.datalabels,
-            anchor: 'end', 
-            align: 'end', 
-            formatter: (value) => value > 0 ? `${value.toFixed(1)} ${translate('chart_label_days_suffix')}` : null 
-        },
-            tooltip: {
-                ...tooltipConfig,
-                callbacks: {
-                    title: (tooltipItems) => tooltipItems[0].label,
-                    label: (tooltipItem) => {
-                        const avgDays = ((tooltipItem.raw as number) || 0).toFixed(1);
-                        return `${translate('chart_tooltip_avg_days')}: ${avgDays}`;
-                    },
-                    afterLabel: (tooltipItem) => {
-                        const shipowner = tooltipItem.label;
-                        const originalData = avgDaysData.find(d => d.shipowner === shipowner);
-                        return originalData ? `${translate('tooltip_from')} ${originalData.count} ${translate('tooltip_containers')}` : '';
-                    }
-                }
-            }
-        } }
-    });
-}
-
-// --- PERSISTENCE ---
-async function clearData() {
-    const confirmed = await showConfirmationDialog('Limpar Todos os Dados', 'Tem certeza que deseja limpar os dados do servidor? Esta ação é permanente e afetará todos os usuários.');
-    if (confirmed) {
-        loadingOverlay.classList.remove('hidden');
-        try {
-            await db.collection("demurrage_dashboard").doc("live_data").delete();
-            saveHistorySnapshot('Data Cleared'); 
-            localStorage.removeItem('demurrageHistory'); 
-            showToast(translate('toast_clear_data'), 'info');
-        } catch (error) {
-            console.error("Error clearing data in Firebase:", error);
-            showToast("Failed to clear server data.", "error");
-        } 
+      // Save to Firebase (and all users update)
+      await saveStateToFirebase({
+        deliveryData,
+        lastUpdateSheetName: sheetName,
+      });
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || t("fileProcessError"), "error");
+      resetUI();
+    } finally {
+      uploadLabel.classList.remove("opacity-50", "cursor-not-allowed");
+      if (labelSpan) labelSpan.textContent = t("uploadSheetButton");
+      uploadLabel.querySelector("i")?.classList.remove("fa-spin");
+      fileUpload.value = "";
     }
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+
+// --- EXPORTS ---
+async function exportToExcel() {
+  if (!deliveryData.length) {
+    showToast(t("noDataToExport"), "warning");
+    return;
+  }
+
+  const ok = await showConfirmationDialog(t("exportExcelTitle"), t("exportExcelMessage"));
+  if (!ok) return;
+
+  const ws = XLSX.utils.json_to_sheet(deliveryData.map((d) => ({ ...d })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Deliveries");
+  XLSX.writeFile(wb, "delivery_dashboard.xlsx");
+
+  showToast(t("excelGenerated"), "success");
 }
 
+async function exportToPdf() {
+  if (!deliveryData.length) {
+    showToast(t("noDataToExport"), "warning");
+    return;
+  }
 
-// --- AI INSIGHTS & REPORTS ---
-function simpleMarkdownToHtml(text) {
-    return text
-        .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-3 mb-1">$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-4 mb-2">$1</h2>')
-        .replace(/^\* (.*$)/gim, '<li class="ml-4">$1</li>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>')
-        .replace(/<br><li/g, '<li')
-        .replace(/<\/li><br>/g, '</li>');
-}
+  const ok = await showConfirmationDialog(t("exportPdfTitle"), t("exportPdfMessage"));
+  if (!ok) return;
 
-async function getAiInsights() {
-    const modalBody = document.getElementById('ai-modal-body')!;
-    modalBody.innerHTML = `<div class="flex items-center justify-center"><i class="fas fa-spinner fa-spin text-2xl text-purple-500"></i><p class="ml-2">Gerando insights...</p></div>`;
-    openModal('ai-modal');
-    
-    try {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!apiKey) throw new Error("API Key for Gemini not found.");
+  const { jsPDF } = jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 
-        const ai = new GoogleGenAI({ apiKey });
+  // Try to use autoTable if available, otherwise print minimal info
+  const hasAutoTable = typeof (doc as any).autoTable === "function";
 
-        const allLateContainers = appState.filteredData.filter(d => d['Demurrage Cost'] > 0);
-        
-        const costByShipowner = allLateContainers.reduce((acc, d) => {
-            acc[d.Shipowner] = (acc[d.Shipowner] || 0) + d['Demurrage Cost'];
-            return acc;
-        }, {});
-        
-        const daysByShipowner = allLateContainers.reduce((acc, d) => {
-            if (!acc[d.Shipowner]) {
-                acc[d.Shipowner] = { totalDays: 0, count: 0 };
-            }
-            acc[d.Shipowner].totalDays += d['Demurrage Days'];
-            acc[d.Shipowner].count += 1;
-            return acc;
-        }, {});
+  doc.setFontSize(14);
+  doc.text(t("pdfTitle"), 40, 40);
+  doc.setFontSize(9);
+  doc.text(t("pdfGeneratedOn", new Date().toLocaleString(currentLanguage)), 40, 58);
 
-        const avgDaysData = Object.entries(daysByShipowner).map(([shipowner, data]) => ({
-            shipowner,
-            avgDays: data.totalDays / data.count
-        })).sort((a, b) => b.avgDays - a.avgDays);
-        
-        const topProblemContainers = [...allLateContainers]
-            .sort((a, b) => b['Demurrage Cost'] - a['Demurrage Cost'])
-            .slice(0, 3)
-            .map(c => ({
-                containerId: c.Container,
-                shipowner: c.Shipowner,
-                cost: formatCurrency(c['Demurrage Cost']),
-                days: c['Demurrage Days']
-            }));
+  if (hasAutoTable) {
+    const headers = [["#", "DELIVERY", "CONTAINER", "BL", "VESSEL", "CARRIER", "WAREHOUSE", "LOT", "STATUS"]];
+    const body = deliveryData.map((d, idx) => [
+      String(idx + 1),
+      String(d["DELIVERY AT BYD"] || ""),
+      String(d["CONTAINER"] || ""),
+      String(d["BL"] || ""),
+      String(d["VESSEL"] || ""),
+      String(d["TRANSPORTATION COMPANY"] || ""),
+      String(d["BONDED WAREHOUSE"] || ""),
+      String(d["LOT"] || ""),
+      String(d["STATUS"] || ""),
+    ]);
 
-        const today = new Date();
-        const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-
-        const dataSummary = {
-            totalContainers: appState.filteredData.length,
-            totalDemurrageCost: appState.filteredData.reduce((sum, d) => sum + d['Demurrage Cost'], 0),
-            containerStatusBreakdown: {
-                activeLate: appState.filteredData.filter(d => !d['Return Date'] && d['Demurrage Days'] > 0).length,
-                returnedLate: appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Days'] > 0).length,
-                atRiskNext15Days: appState.filteredData.filter(d => !d['Return Date'] && d['End of Free Time'].getTime() - todayUTC.getTime() > 0 && d['End of Free Time'].getTime() - todayUTC.getTime() <= 15 * 24 * 60 * 60 * 1000).length,
-                returnedOnTime: appState.filteredData.filter(d => d['Return Date'] && d['Demurrage Days'] === 0).length,
-            },
-            shipownersByCost: Object.entries(costByShipowner).sort((a,b) => b[1] - a[1]).slice(0, 5).map(e => ({ shipowner: e[0], cost: formatCurrency(e[1]) })),
-            shipownersByAvgDays: avgDaysData.slice(0, 5).map(d => ({ shipowner: d.shipowner, avgDays: d.avgDays.toFixed(1) })),
-            topProblemContainers: topProblemContainers
-        };
-        
-        const prompt = `
-            As an expert logistics and supply chain analyst, analyze the following demurrage data summary for a logistics manager.
-            Your analysis must be in markdown format and follow this structure precisely:
-            
-            ## Executive Summary
-            A brief, high-level overview of the current operational and financial situation regarding demurrage.
-            
-            ## Performance Deep Dive
-            Analyze the provided data points, identifying key trends, outliers, and areas of concern. Explicitly reference shipowner performance by comparing their total costs vs. their average delay days to distinguish between systemic issues and one-off problems.
-            
-            ## Actionable Recommendations
-            Provide 3-5 specific, concrete, data-driven recommendations.
-            - Start by suggesting targeted strategies for the specific 'Top 3 Problematic Containers' listed in the data.
-            - Then, provide broader recommendations based on the shipowner performance analysis to address systemic issues.
-
-            Here is the data summary:
-            - Total Containers Analyzed: ${dataSummary.totalContainers}
-            - Total Demurrage Cost (Active & Returned): ${formatCurrency(dataSummary.totalDemurrageCost)}
-            - Container Status Breakdown: ${JSON.stringify(dataSummary.containerStatusBreakdown)}
-            - Top 5 Shipowners by Total Demurrage Cost: ${JSON.stringify(dataSummary.shipownersByCost)}
-            - Top 5 Shipowners by Average Demurrage Days: ${JSON.stringify(dataSummary.shipownersByAvgDays)}
-            - Top 3 Problematic Containers (by cost): ${JSON.stringify(dataSummary.topProblemContainers)}
-        `;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
-        
-        modalBody.innerHTML = simpleMarkdownToHtml(response.text);
-
-    } catch (error) {
-        console.error("AI Insights Error:", error);
-        modalBody.innerHTML = `<p class="text-red-500">Ocorreu um erro ao gerar os insights. Verifique a chave da API e tente novamente.</p>`;
-    }
-}
-
-async function generateDemurrageJustification(container: ContainerData) {
-    const reportArea = document.getElementById('justification-report-area')!;
-    reportArea.innerHTML = `<div class="flex items-center justify-center p-4">
-        <i class="fas fa-spinner fa-spin text-xl text-purple-500"></i>
-        <p class="ml-3" data-translate-key="generating_report">${translate('generating_report')}</p>
-    </div>`;
-
-    try {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!apiKey) throw new Error("API Key for Gemini not found.");
-
-        const ai = new GoogleGenAI({ apiKey });
-
-        const prompt = `
-            As a senior logistics coordinator, I need to write a formal justification report for a demurrage charge to get payment approval. Based on the data for the container below, please generate a plausible and professional report.
-
-            The report should:
-            1.  Be structured with a clear subject line (e.g., "Subject: Justification for Demurrage Charges - Container [Container Number]").
-            2.  Briefly summarize the key details of the shipment.
-            3.  Provide a list of likely contributing factors for the delay. Infer these from common logistics scenarios. Do NOT state them as facts, but as high-probability causes (e.g., "customs clearance delays," "port congestion," "trucking/drayage availability issues," "warehouse receiving delays").
-            4.  Conclude with a formal statement requesting approval for the payment of the demurrage cost.
-            5.  The tone must be professional, formal, and concise.
-
-            Container Data:
-            - Container ID: ${container.Container}
-            - Purchase Order (PO): ${container.PO}
-            - Vessel: ${container.Vessel}
-            - Shipowner: ${container.Shipowner}
-            - Discharge Date: ${formatDate(container['Discharge Date'])}
-            - End of Free Time: ${formatDate(container['End of Free Time'])}
-            - Actual Return Date: ${formatDate(container['Return Date'])}
-            - Demurrage Days: ${container['Demurrage Days']}
-            - Total Demurrage Cost: ${formatCurrency(container['Demurrage Cost'])}
-            - Final Status: ${container['Final Status']}
-            - Cargo Type: ${container['Cargo Type']}
-
-            Generate only the report text in markdown format.
-        `;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
-
-        const reportHtml = simpleMarkdownToHtml(response.text);
-
-        reportArea.innerHTML = `
-            <div class="relative">
-                <h4 class="text-md font-bold mb-2 text-gray-800 dark:text-slate-100" data-translate-key="report_title">${translate('report_title')}</h4>
-                <button id="copy-report-btn" title="${translate('copy_btn')}" class="absolute top-0 right-0 bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500 text-slate-600 dark:text-slate-200 text-xs font-semibold py-1 px-2 rounded">
-                    <i class="fas fa-copy mr-1"></i> ${translate('copy_btn')}
-                </button>
-                <div id="report-content" class="text-sm text-gray-700 dark:text-slate-300 space-y-2 mt-2 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-md border dark:border-slate-700">${reportHtml}</div>
-            </div>
-        `;
-
-        document.getElementById('copy-report-btn')!.addEventListener('click', () => {
-            const reportText = document.getElementById('report-content')!.innerText;
-            navigator.clipboard.writeText(reportText);
-            showToast(translate('toast_report_copied'), 'success');
-        });
-
-    } catch (error) {
-        console.error("Justification Report Error:", error);
-        reportArea.innerHTML = `<p class="text-red-500" data-translate-key="error_generating_report">${translate('error_generating_report')}</p>`;
-    }
-}
-
-
-// --- THEME & TRANSLATION ---
-function toggleTheme() {
-    const isDark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    themeToggleIcon.className = `fas fa-${isDark ? 'sun' : 'moon'}`;
-    if (appState.allData.length > 0) createOrUpdateCharts();
-}
-
-function translate(key: string, ...args: any[]): string {
-    const textOrFn = translations[appState.currentLanguage]?.[key] || translations.pt[key];
-    if (typeof textOrFn === 'function') {
-        return textOrFn(...args);
-    }
-    return textOrFn || key;
-}
-
-function translateApp() {
-    document.querySelectorAll('[data-translate-key]').forEach(el => {
-        const key = el.getAttribute('data-translate-key')!;
-        // Find the innermost element that doesn't contain another translated element
-        const targetEl = el.querySelector('[data-translate-key]') ? el.childNodes[0] : el;
-        const target = el.hasAttribute('placeholder') ? el : targetEl;
-        
-        if (target instanceof HTMLElement || target instanceof Text) {
-            if (el.hasAttribute('placeholder')) {
-                el.setAttribute('placeholder', translate(key));
-            } else {
-                 target.textContent = translate(key);
-            }
-        }
+    (doc as any).autoTable({
+      head: headers,
+      body,
+      startY: 80,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [30, 64, 175] },
+      margin: { left: 40, right: 40 },
     });
+  } else {
+    doc.setFontSize(10);
+    doc.text("autoTable plugin not found. Showing summary only.", 40, 90);
+    doc.text(`Rows: ${deliveryData.length}`, 40, 110);
+  }
 
-    const nextLang = appState.currentLanguage === 'pt' ? 'en' : appState.currentLanguage === 'en' ? 'zh' : 'pt';
-    translateBtnText.textContent = nextLang.toUpperCase();
-    if(nextLang === 'zh') translateBtnText.textContent = '中文';
+  doc.save("delivery_dashboard.pdf");
+  showToast(t("pdfGenerated"), "success");
 }
 
-function cycleLanguage() {
-    appState.currentLanguage = appState.currentLanguage === 'pt' ? 'en' : appState.currentLanguage === 'en' ? 'zh' : 'pt';
-    localStorage.setItem('currentLanguage', appState.currentLanguage);
-    translateApp();
-    if (appState.allData.length > 0) {
-        renderPaidDemurrageTable();
-        createOrUpdateCharts();
-    }
-}
+exportExcelBtn?.addEventListener("click", exportToExcel);
+exportPdfBtn?.addEventListener("click", exportToPdf);
 
-// --- INITIALIZATION ---
-function init() {
-    // Event Listeners
-    fileUpload.addEventListener('change', handleFileUpload);
-    applyFiltersBtn.addEventListener('click', applyFilters);
-    resetFiltersBtn.addEventListener('click', resetFilters);
-    clearDataBtn.addEventListener('click', clearData);
-    settingsBtn.addEventListener('click', openRatesModal);
-    aiInsightsBtn.addEventListener('click', getAiInsights);
-    historyBtn.addEventListener('click', renderHistoryModal);
-    returnToLiveBtn.addEventListener('click', returnToLiveView);
-    
-    document.getElementById('rates-modal-save-btn')!.addEventListener('click', saveRates);
-    
-    document.getElementById('global-search-input')!.addEventListener('input', (e) => {
-        const term = (e.target as HTMLInputElement).value;
-        applyFilters(); 
-        globalSearch(term);
-        renderDashboard();
-    });
+// --- INIT ---
+document.addEventListener("DOMContentLoaded", () => {
+  // Theme
+  const savedTheme = (localStorage.getItem("theme") as "light" | "dark") || (htmlEl.classList.contains("dark") ? "dark" : "light");
+  setTheme(savedTheme);
 
-    document.querySelectorAll('[data-tab]').forEach(tab => {
-        tab.addEventListener('click', () => {
-            const tabName = tab.getAttribute('data-tab');
-            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active-tab'));
-            tab.classList.add('active-tab');
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-            document.getElementById(`tab-panel-${tabName}`)!.classList.remove('hidden');
-        });
-    });
+  // Logo
+  loadLogoFromStorage();
 
-    kpiContainer.addEventListener('click', (e) => {
-        const card = (e.target as HTMLElement).closest('[data-kpi-category]') as HTMLElement;
-        if(card) {
-            openListModal(card.dataset.kpiCategory!);
-        }
+  // Language
+  const savedLang = localStorage.getItem("language") as Language;
+  const browserLang = navigator.language;
+  let initialLang: Language = "pt-BR";
+  if (savedLang && (translations as any)[savedLang]) initialLang = savedLang;
+  else if (browserLang.startsWith("en") && (translations as any)["en-US"]) initialLang = "en-US";
+  else if (browserLang.startsWith("zh") && (translations as any)["zh-CN"]) initialLang = "zh-CN";
+  setLanguage(initialLang);
 
-        const tabCard = (e.target as HTMLElement).closest('[data-kpi-tab]') as HTMLElement;
-        if(tabCard) {
-            const tabName = tabCard.dataset.kpiTab!;
-            document.querySelector<HTMLElement>(`.tab-btn[data-tab="${tabName}"]`)?.click();
-        }
-    });
+  // Start Firebase realtime listener
+  listenForRealtimeUpdates();
 
-    document.getElementById('export-pdf-btn')!.addEventListener('click', async () => {
-        const { jsPDF } = jspdf;
-        const doc = new jsPDF();
-        const table = document.getElementById('list-modal-table');
-        if(table) {
-            doc.autoTable({
-                html: table,
-                startY: 20,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185] }
-            });
-            doc.text(document.getElementById('list-modal-title')!.textContent!, 14, 15);
-            doc.save('demurrage_report.pdf');
-        }
-    });
-
-    themeToggleBtn.addEventListener('click', toggleTheme);
-    translateBtn.addEventListener('click', cycleLanguage);
-
-    // Initial Setup
-    if (localStorage.getItem('theme') === 'dark' || 
-       (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-        themeToggleIcon.className = 'fas fa-sun';
-    } else {
-        document.documentElement.classList.remove('dark');
-        themeToggleIcon.className = 'fas fa-moon';
-    }
-    
-    appState.currentLanguage = (localStorage.getItem('currentLanguage') as any) || 'pt';
-
-    setupModals();
-    setupFilterSearch();
-    
-    // Start listening to Firebase for data
-    listenForRealtimeUpdates();
-    translateApp();
-}
-
-// --- RUN APP ---
-document.addEventListener('DOMContentLoaded', init);
-", what's wrong with the selected code?
-
+  // Initial UI
+  resetUI();
+});
