@@ -1034,7 +1034,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
       .sort((a, b) => b[1].total - a[1].total)
       .map(([carrier, stats]) => {
         const carrierPercent = stats.total > 0 ? (stats.delivered / stats.total) * 100 : 0;
-        return `<div class="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-all hover:border-blue-300 dark:hover:border-blue-700">
+        return `<button type="button" class="carrier-card-btn text-left bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-all hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md cursor-pointer w-full" data-carrier="${carrier}">
           <div class="flex justify-between items-start mb-2">
             <span class="font-bold text-sm text-slate-700 dark:text-slate-200 truncate pr-2" title="${carrier}">${carrier}</span>
             <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">${carrierPercent.toFixed(0)}%</span>
@@ -1046,9 +1046,22 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
           <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
             <div class="bg-blue-500 h-full transition-all duration-700" style="width: ${carrierPercent}%"></div>
           </div>
-        </div>`;
+        </button>`;
       })
       .join("");
+
+    // Add click handlers for carrier cards
+    setTimeout(() => {
+      card.querySelectorAll(".carrier-card-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const carrier = (btn as HTMLElement).dataset.carrier;
+          if (carrier) {
+            searchInput.value = carrier;
+            searchInput.dispatchEvent(new Event("input"));
+          }
+        });
+      });
+    }, 0);
 
     const goalBadge =
       hasRealDate && cardGoal > 0
