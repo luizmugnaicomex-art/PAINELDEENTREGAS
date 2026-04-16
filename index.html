@@ -29,7 +29,7 @@
 <link rel="stylesheet" href="/index.css">
 </head>
 <body class="p-4 md:p-8 bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-300">
-    <div class="max-w-7xl mx-auto">
+    <div class="max-w-[95vw] mx-auto">
         
         <!-- Header -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -49,18 +49,21 @@
                     </div>
                     <input type="search" id="search-input" placeholder="Pesquisar container, placa..." data-i18n-placeholder="searchInputPlaceholder" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm py-2.5 pl-10 pr-4 text-sm focus:ring-blue-500 focus:border-blue-500 transition">
                 </div>
-                <button id="battery-filter-btn" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2.5 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center" aria-label="Filtrar Baterias" data-i18n-aria-label="filterBatteryTooltip" title="Filtrar Baterias" data-i18n-title="filterBatteryTooltip">
+                <button id="battery-filter-btn" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center h-[42px]" aria-label="Filtrar Baterias" data-i18n-aria-label="filterBatteryTooltip" title="Filtrar Baterias" data-i18n-title="filterBatteryTooltip">
                     <i class="fas fa-bolt w-5 text-center text-amber-500"></i>
                 </button>
-                <button id="kd-filter-btn" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2.5 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center font-bold text-blue-600" aria-label="Filtrar KD" data-i18n-aria-label="filterKdTooltip" title="Filtrar KD" data-i18n-title="filterKdTooltip">
+                <button id="kd-filter-btn" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center font-bold text-blue-600 h-[42px]" aria-label="Filtrar KD" data-i18n-aria-label="filterKdTooltip" title="Filtrar KD" data-i18n-title="filterKdTooltip">
                     KD
                 </button>
-                <label for="logo-upload" class="cursor-pointer bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2.5 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center" title="Carregar logo da empresa" data-i18n-title="uploadLogoTooltip">
+                <button id="project-filter-btn" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center font-bold text-purple-600 h-[42px]" aria-label="Filtrar Project Cargo" title="Filtrar Project Cargo">
+                    PC
+                </button>
+                <label for="logo-upload" class="cursor-pointer bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center h-[42px]" title="Carregar logo da empresa" data-i18n-title="uploadLogoTooltip">
                     <i class="fas fa-image w-5 text-center"></i>
                 </label>
                 <input id="logo-upload" type="file" class="hidden" accept="image/png, image/jpeg, image/svg+xml">
 
-                <button id="theme-toggle" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2.5 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center" aria-label="Alternar tema" data-i18n-aria-label="toggleThemeTooltip">
+                <button id="theme-toggle" class="bg-white dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600 text-gray-700 px-3 py-2 rounded-lg shadow-sm border border-gray-300 hover:bg-gray-50 transition-all duration-300 flex items-center h-[42px]" aria-label="Alternar tema" data-i18n-aria-label="toggleThemeTooltip">
                     <i class="fas fa-sun w-5 text-center"></i>
                 </button>
                 <div id="language-switcher" class="flex items-center space-x-1 bg-white dark:bg-slate-700 p-1 rounded-lg shadow-sm border border-gray-300 dark:border-slate-600">
@@ -99,10 +102,14 @@
         <!-- Delivery Dashboard -->
         <div id="delivery-dashboard" class="hidden">
             <div id="delivery-tabs" class="flex items-center border-b border-gray-200 dark:border-slate-700 mb-4 overflow-x-auto pb-1" role="tablist" aria-label="Datas de entrega">
-                <!-- Tabs will be injected here -->
+                <button type="button" role="tab" aria-selected="true" class="tab-btn px-4 py-2 border-b-2 border-blue-500 text-blue-600 dark:text-blue-400 font-semibold text-sm" data-tab="deliveries" data-i18n="deliveriesTab">Entregas</button>
+                <button type="button" role="tab" aria-selected="false" class="tab-btn px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 hover:dark:text-slate-200 font-semibold text-sm" data-tab="arrivals" data-i18n="arrivalsTab">Arrivals per Lot</button>
             </div>
             <div id="delivery-content">
                 <!-- Content panes (cards) will be injected here -->
+            </div>
+            <div id="arrivals-content" class="hidden">
+                <!-- Lot arrivals table will be injected here -->
             </div>
         </div>
         
