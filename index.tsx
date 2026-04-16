@@ -1158,8 +1158,11 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                   <span class="carrier-name-filter font-bold text-sm text-slate-700 dark:text-slate-200 truncate pr-2 hover:text-blue-600 cursor-pointer" title="${carrier}" data-carrier="${carrier}">${carrier}</span>
                   <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">${carrierPercent.toFixed(0)}%</span>
                 </div>
-                <div class="flex flex-col gap-1 w-full">
-                   <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <div class="flex flex-col gap-2 w-full">
+                   <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1">
+                      <div class="bg-blue-500 h-full transition-all duration-700" style="width: ${carrierPercent}%"></div>
+                   </div>
+                   <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                       <span>Agendados: <strong class="text-slate-700 dark:text-slate-200">${totalItems}</strong></span>
                       <span>Entregues: <strong class="text-green-600 dark:text-green-400">${totalDelivered}</strong></span>
                    </div>
