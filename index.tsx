@@ -53,6 +53,7 @@ const exportPdfBtn = document.getElementById("export-pdf-btn") as HTMLButtonElem
 const themeToggleBtn = document.getElementById("theme-toggle") as HTMLButtonElement;
 const batteryFilterBtn = document.getElementById("battery-filter-btn") as HTMLButtonElement;
 const kdFilterBtn = document.getElementById("kd-filter-btn") as HTMLButtonElement;
+const projectFilterBtn = document.getElementById("project-filter-btn") as HTMLButtonElement;
 const lotSearchInput = document.getElementById("lot-search-input") as HTMLInputElement;
 const lotSearchContainer = document.getElementById("lot-search-container") as HTMLDivElement;
 const htmlEl = document.documentElement;
@@ -153,10 +154,13 @@ const translations = {
     detailsCompany: "Transportadora",
     performanceTitle: "Desempenho por Transportadora",
     badgeBattery: "Bateria",
+    deliveriesTab: "Entregas",
+    arrivalsTab: "Arrivals per Lot",
     pdfTitle: "Programação de Entregas de Contêineres",
     pdfGeneratedOn: (date: string) => `Relatório gerado em: ${date}`,
     pdfPage: (page: number, total: number) => `Página ${page} de ${total}`,
     lastUpdateText: (sheet: string, date: string) => `Dados de "${sheet}" | Carregado em: ${date}`,
+    clickToExpand: "Clique para expandir",
     changeStatusFor: (containerId: string) => `Alterar status do container ${containerId || ""}`,
     viewDetailsFor: (containerId: string) => `Ver detalhes do container ${containerId || "sem identificação"}`,
     goalLabel: "Meta",
@@ -381,6 +385,7 @@ let searchDebounceTimer: number;
 let activeStatusFilter: string | null = null;
 let showOnlyBattery: boolean = false;
 let showOnlyKd: boolean = false;
+let showOnlyProject: boolean = false;
 
 /* ------------------------------ STATIC TEXT -------------------------------- */
 function updateStaticText() {
@@ -774,6 +779,10 @@ function resetUI() {
 }
 
 function applyFiltersAndRender(activeTabId: string | null = null) {
+  if (!activeTabId) {
+    const activeTab = deliveryTabs?.querySelector(".tab-btn.active");
+    activeTabId = (activeTab as HTMLElement)?.dataset.target || null;
+  }
   const query = (searchInput?.value || "").trim().toLowerCase();
   const lotQuery = (lotSearchInput?.value || "").trim().toLowerCase();
   let filteredData = deliveryData;
@@ -789,6 +798,13 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
     filteredData = filteredData.filter((row) => {
       const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
       return materialType.includes("KD");
+    });
+  }
+
+  if (showOnlyProject) {
+    filteredData = filteredData.filter((row) => {
+      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
+      return !materialType.includes("BATTERY") && !materialType.includes("BATERIA") && !materialType.includes("KD");
     });
   }
 
@@ -837,6 +853,12 @@ function updateStats() {
       return materialType.includes("KD");
     });
   }
+  if (showOnlyProject) {
+    dataForStats = dataForStats.filter((row) => {
+      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
+      return !materialType.includes("BATTERY") && !materialType.includes("BATERIA") && !materialType.includes("KD");
+    });
+  }
 
   const total = dataForStats.length;
   const delivered = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
@@ -865,8 +887,8 @@ function updateStats() {
         <i class="fas fa-box-open text-lg"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("totalContainers")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${total}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("totalContainers")}">${t("totalContainers")}</div>
+        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${total}</div>
       </div>
     </div>
 
@@ -875,9 +897,9 @@ function updateStats() {
         <i class="fas fa-check-circle text-lg"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("delivered")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${delivered}</div>
-        <div class="text-xs font-bold text-green-600 dark:text-green-400">${getPercentage(delivered)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("delivered")}">${t("delivered")}</div>
+        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${delivered}</div>
+        <div class="text-[10px] font-bold text-green-600 dark:text-green-400">${getPercentage(delivered)}</div>
       </div>
     </div>
 
@@ -886,9 +908,9 @@ function updateStats() {
         <i class="fas fa-box text-lg"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("awaitingUnload")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${awaitingUnload}</div>
-        <div class="text-xs font-bold text-purple-600 dark:text-purple-400">${getPercentage(awaitingUnload)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("awaitingUnload")}">${t("awaitingUnload")}</div>
+        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${awaitingUnload}</div>
+        <div class="text-[10px] font-bold text-purple-600 dark:text-purple-400">${getPercentage(awaitingUnload)}</div>
       </div>
     </div>
 
@@ -897,9 +919,9 @@ function updateStats() {
         <i class="fas fa-truck text-lg"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("inTransit")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${inTransit}</div>
-        <div class="text-xs font-bold text-yellow-600 dark:text-yellow-400">${getPercentage(inTransit)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("inTransit")}">${t("inTransit")}</div>
+        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${inTransit}</div>
+        <div class="text-[10px] font-bold text-yellow-600 dark:text-yellow-400">${getPercentage(inTransit)}</div>
       </div>
     </div>
 
@@ -908,9 +930,9 @@ function updateStats() {
         <i class="fas fa-hourglass-half text-lg"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("pending")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${pending}</div>
-        <div class="text-xs font-bold text-slate-600 dark:text-slate-400">${getPercentage(pending)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("pending")}">${t("pending")}</div>
+        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${pending}</div>
+        <div class="text-[10px] font-bold text-slate-600 dark:text-slate-400">${getPercentage(pending)}</div>
       </div>
     </div>
 
@@ -919,9 +941,9 @@ function updateStats() {
         <i class="fas fa-calendar-alt text-lg"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("postponed")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${postponed}</div>
-        <div class="text-xs font-bold text-indigo-600 dark:text-indigo-400">${getPercentage(postponed)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("postponed")}">${t("postponed")}</div>
+        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${postponed}</div>
+        <div class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">${getPercentage(postponed)}</div>
       </div>
     </div>
 
@@ -1054,10 +1076,18 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
     setTimeout(() => {
       card.querySelectorAll(".carrier-card-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const carrier = (btn as HTMLElement).dataset.carrier;
-          if (carrier) {
-            searchInput.value = carrier;
-            searchInput.dispatchEvent(new Event("input"));
+          const detailsContainers = btn.querySelectorAll(".lot-details");
+          detailsContainers.forEach((d) => d.classList.toggle("hidden"));
+        });
+      });
+      card.querySelectorAll(".carrier-name-filter").forEach((span) => {
+        span.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const carrier = (span as HTMLElement).dataset.carrier;
+          const searchInput = document.getElementById("search-input") as HTMLInputElement;
+          if (searchInput) {
+            searchInput.value = carrier || "";
+            applyFiltersAndRender();
           }
         });
       });
@@ -1094,7 +1124,53 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
           <i class="fas fa-chart-line mr-2 text-blue-500"></i> ${t("performanceTitle")}
         </h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          ${carrierBreakdownHTML}
+          ${Object.entries(
+            deliveries.reduce((acc, d) => {
+              const carrier = String(d["TRANSPORTATION COMPANY"] || "N/A").trim() || "N/A";
+              const lot = String(d["LOT"] || "N/A");
+              if (!acc[carrier]) acc[carrier] = {};
+              if (!acc[carrier][lot]) acc[carrier][lot] = { total: 0, delivered: 0 };
+              acc[carrier][lot].total++;
+              if (normalizeText(d["STATUS"] || "") === "ENTREGUE") acc[carrier][lot].delivered++;
+              return acc;
+            }, {} as Record<string, Record<string, { total: number; delivered: number }>>)
+          )
+            .map(([carrier, lots]) => {
+              const lotHTML = Object.entries(lots)
+                .map(([lot, stats]) => {
+                  return `
+                    <div class="lot-details border-t border-slate-100 dark:border-slate-700 mt-2 pt-2 hidden">
+                        <div class="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Lote ${lot}</div>
+                        <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                           <span>Agendados: <strong class="text-slate-700 dark:text-slate-200">${stats.total}</strong></span>
+                           <span>Entregues: <strong class="text-green-600 dark:text-green-400">${stats.delivered}</strong></span>
+                        </div>
+                    </div>`;
+                })
+                .join("");
+              
+              const totalItems = Object.values(lots).reduce((a, b) => a + b.total, 0);
+              const totalDelivered = Object.values(lots).reduce((a, b) => a + b.delivered, 0);
+              const carrierPercent = totalItems > 0 ? (totalDelivered / totalItems) * 100 : 0;
+                
+              return `<button type="button" class="carrier-card-btn text-left bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-all hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md cursor-pointer w-full group" data-carrier="${carrier}">
+                <div class="flex justify-between items-start mb-2 w-full">
+                  <span class="carrier-name-filter font-bold text-sm text-slate-700 dark:text-slate-200 truncate pr-2 hover:text-blue-600 cursor-pointer" title="${carrier}" data-carrier="${carrier}">${carrier}</span>
+                  <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">${carrierPercent.toFixed(0)}%</span>
+                </div>
+                <div class="flex flex-col gap-1 w-full">
+                   <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      <span>Agendados: <strong class="text-slate-700 dark:text-slate-200">${totalItems}</strong></span>
+                      <span>Entregues: <strong class="text-green-600 dark:text-green-400">${totalDelivered}</strong></span>
+                   </div>
+                  ${lotHTML}
+                </div>
+                <div class="mt-2 text-[10px] text-blue-600 dark:text-blue-400 font-semibold text-center italic">
+                    ${t("clickToExpand")}
+                </div>
+              </button>`;
+            })
+            .join("")}
         </div>
       </div>
 
@@ -1123,12 +1199,12 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                 const isKd = materialType.includes("KD");
                 const rowClass = `transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer ${
                   isBattery ? "is-battery" : ""
-                } ${isKd ? "is-kd" : ""} ${status === "ENTREGUE" ? "bg-green-50/30 dark:bg-green-900/10 opacity-80" : ""}`;
+                } ${isKd ? "is-kd" : ""} ${status === "ENTREGUE" ? "bg-green-100 dark:bg-green-900/30" : status === "CANCELADO" ? "bg-red-100 dark:bg-red-900/30" : ""}`;
 
                 const plate = String(row["TRUCK LICENSE PLATE 1"] || row["PLATE"] || "").trim();
 
                 return `<tr class="${rowClass}" data-row-id="${row._id}">
-                  <td class="px-4 py-3 text-xs text-center border-l-4 ${isBattery ? "border-amber-500" : isKd ? "border-blue-500" : "border-transparent"}">${rowIndex + 1}</td>
+                  <td class="px-4 py-3 text-xs text-center border-l-8 ${isBattery ? "border-amber-600" : isKd ? "border-blue-700" : "border-transparent"}">${rowIndex + 1}</td>
                   <td class="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100">
                     ${row["CONTAINER"] || "-"}
                     ${isBattery
@@ -1317,9 +1393,21 @@ deliveryContent?.addEventListener("change", async (e) => {
 deliveryTabs?.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".tab-btn");
   if (btn) {
-    deliveryTabs.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    deliveryContent.querySelectorAll<HTMLElement>(".date-card").forEach((c) => c.classList.toggle("hidden", c.id !== btn.dataset.target));
+    deliveryTabs.querySelectorAll(".tab-btn").forEach((b) => {
+      b.classList.remove("border-blue-500", "text-blue-600");
+      b.classList.add("border-transparent", "text-slate-500");
+    });
+    btn.classList.add("border-blue-500", "text-blue-600");
+    btn.classList.remove("border-transparent", "text-slate-500");
+
+    const target = btn.dataset.tab;
+    deliveryContent.classList.toggle("hidden", target !== "deliveries");
+    const arrivalsContent = document.getElementById("arrivals-content");
+    arrivalsContent?.classList.toggle("hidden", target !== "arrivals");
+    
+    if (target === "arrivals") {
+      renderArrivalsTable();
+    }
   }
 });
 
@@ -1352,6 +1440,15 @@ kdFilterBtn?.addEventListener("click", () => {
   applyFiltersAndRender();
 });
 
+projectFilterBtn?.addEventListener("click", () => {
+  showOnlyProject = !showOnlyProject;
+  projectFilterBtn.classList.toggle("ring-2", showOnlyProject);
+  projectFilterBtn.classList.toggle("ring-purple-500", showOnlyProject);
+  projectFilterBtn.classList.toggle("bg-purple-50", showOnlyProject);
+  projectFilterBtn.classList.toggle("dark:bg-purple-900/30", showOnlyProject);
+  applyFiltersAndRender();
+});
+
 /* -------------------------- STATUS FILTER CARDS ---------------------------- */
 summaryStats?.addEventListener("click", (e) => {
   const card = (e.target as HTMLElement).closest<HTMLDivElement>("[data-status]");
@@ -1363,6 +1460,56 @@ summaryStats?.addEventListener("click", (e) => {
 });
 
 /* ----------------------- XLSX PARSER (IMPROVED) ---------------------------- */
+function renderArrivalsTable() {
+  const arrivalsContent = document.getElementById("arrivals-content");
+  if (!arrivalsContent) return;
+
+  const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
+  const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
+
+  const tableHtml = `
+    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+      <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300">
+        <thead class="bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600">
+          <tr>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">Lote</th>
+            ${statuses.map((s) => `<th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${s}</th>`).join("")}
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">Total</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          ${lotsFromData
+            .map((lot) => {
+              const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
+              const statusCounts = statuses.reduce((acc, s) => {
+                acc[s] = deliveriesInLot.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
+                return acc;
+              }, {} as Record<string, number>);
+              const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+
+              if (total === 0) return "";
+
+              return `<tr>
+                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${lot}</td>
+                ${statuses.map((s) => `<td class="px-4 py-3">${statusCounts[s] > 0 ? statusCounts[s] : ""}</td>`).join("")}
+                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${total}</td>
+              </tr>`;
+            })
+            .join("")}
+        </tbody>
+        <tfoot class="bg-slate-50 dark:bg-slate-700 border-t border-slate-200 dark:border-slate-600 font-bold">
+          <tr>
+            <td class="px-4 py-3 text-slate-800 dark:text-slate-100">Total Geral</td>
+            ${statuses.map((s) => `<td class="px-4 py-3 text-slate-800 dark:text-slate-100">${deliveryData.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length}</td>`).join("")}
+            <td class="px-4 py-3 text-slate-800 dark:text-slate-100">${deliveryData.length}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
+  arrivalsContent.innerHTML = tableHtml;
+}
+
 function buildHeaderIndex(headers: any[]): Record<string, number> {
   const idx: Record<string, number> = {};
   headers.forEach((h, i) => {
