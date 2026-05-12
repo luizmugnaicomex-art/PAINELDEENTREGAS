@@ -48,6 +48,7 @@ try {
   console.warn("Firebase init skipped:", e);
   db = null;
 }
+
 /* ------------------------------- DOM Elements ------------------------------ */
 const fileUpload = document.getElementById("file-upload") as HTMLInputElement;
 const searchInput = document.getElementById("search-input") as HTMLInputElement;
