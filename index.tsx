@@ -12,7 +12,15 @@
  * - Adds Daily Goal (150 on weekdays; weekends show goal as “bonus”) per date card
  */
 
-/* ------------------------- CDN typings (Studio AI) ------------------------- */
+//@ts-ignore
+import { mountStorageInventory } from './StorageInventory';
+
+function renderInventory(data: any[]) {
+    const container = document.getElementById("inventory-content");
+    if (container) {
+        mountStorageInventory(container, data);
+    }
+}
 declare const firebase: any;
 declare const XLSX: any;
 declare const jspdf: any;
@@ -163,6 +171,12 @@ const translations = {
     deliveriesTab: "Entregas",
     arrivalsTab: "Chegadas por Lote",
     chartsTab: "Gráficos (Operação)",
+    inventoryTab: "Estoque",
+    modelsTitle: "Modelos",
+    legendTitle: "Legenda",
+    efic: "EFIC.",
+    prog: "PROG.",
+    pend: "PEND.",
     chartsOverviewTitle: "Visão Geral da Operação",
     chartsLotProgressTitle: "Progresso por Lote",
     chartsCarrierTitle: "Desempenho por Transportadora",
@@ -268,6 +282,12 @@ const translations = {
     deliveriesTab: "Deliveries",
     arrivalsTab: "Arrivals per Lot",
     chartsTab: "Charts (Operation)",
+    inventoryTab: "Inventory",
+    modelsTitle: "Models",
+    legendTitle: "Legend",
+    efic: "EFFIC.",
+    prog: "PROG.",
+    pend: "PEND.",
     chartsOverviewTitle: "Operation Overview",
     chartsLotProgressTitle: "Progress by Lot",
     chartsCarrierTitle: "Carrier Performance",
@@ -372,6 +392,12 @@ const translations = {
     deliveriesTab: "交货",
     arrivalsTab: "每批到达",
     chartsTab: "图表（运营）",
+    inventoryTab: "库存",
+    modelsTitle: "型号",
+    legendTitle: "图例",
+    efic: "效率",
+    prog: "进度",
+    pend: "待处理",
     chartsOverviewTitle: "运营概览",
     chartsLotProgressTitle: "按批次进度",
     chartsCarrierTitle: "承运人绩效",
@@ -426,6 +452,7 @@ let showOnlyKd: boolean = false;
 let showOnlyProject: boolean = false;
 let overallChart: any = null;
 let lotChart: any = null;
+let modelChart: any = null;
 let carrierCharts: any[] = [];
 let warehouseCharts: any[] = [];
 
@@ -880,6 +907,7 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   renderDeliveryDashboard(filteredData, activeTabId);
   renderArrivalsTable(); // Keep Arrivals in sync
   renderCharts(filteredData);
+  renderInventory(filteredData); // Keep Inventory in sync
   updateStats();
 }
 
@@ -1456,10 +1484,15 @@ viewModeTabs?.addEventListener("click", (e) => {
     const chartsContent = document.getElementById("charts-content");
     chartsContent?.classList.toggle("hidden", target !== "charts");
     
+    const inventoryContent = document.getElementById("inventory-content");
+    inventoryContent?.classList.toggle("hidden", target !== "inventory");
+    
     if (target === "arrivals") {
       renderArrivalsTable();
     } else if (target === "charts") {
       renderCharts(deliveryData);
+    } else if (target === "inventory") {
+      renderInventory(deliveryData);
     }
   }
 });
@@ -1543,6 +1576,10 @@ function renderCharts(data: DeliveryRow[]) {
     lotChart.destroy();
     lotChart = null;
   }
+  if (modelChart) {
+    modelChart.destroy();
+    modelChart = null;
+  }
 
   // Destroy previous dynamic charts
   carrierCharts.forEach(c => c.destroy());
@@ -1569,46 +1606,6 @@ function renderCharts(data: DeliveryRow[]) {
     });
   }
 
-  // Clear previous charts wrapper
-  chartsContent.innerHTML = `
-    <div class="space-y-6 pb-8">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsOverviewTitle">${t("chartsOverviewTitle")}</h3>
-          <div class="relative h-64">
-             <canvas id="overallChartCanvas"></canvas>
-          </div>
-        </div>
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsLotProgressTitle">${t("chartsLotProgressTitle")}</h3>
-          <div class="relative h-64">
-             <canvas id="lotChartCanvas"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Carriers -->
-      <div class="p-4">
-        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsCarrierTitle">${t("chartsCarrierTitle")}</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="carrier-charts-grid"></div>
-      </div>
-
-      <!-- Warehouses -->
-      <div class="p-4">
-        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsWarehouseTitle">${t("chartsWarehouseTitle")}</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="warehouse-charts-grid"></div>
-      </div>
-
-      <!-- Lot Justifications -->
-      <div class="p-4">
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-          <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsJustificationTitle">${t("chartsJustificationTitle")}</h3>
-          <div id="lot-justifications" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
-        </div>
-      </div>
-    </div>
-  `;
-
   if (typeof Chart === "undefined") {
      console.warn("Chart.js is not loaded.");
      return;
@@ -1632,12 +1629,116 @@ function renderCharts(data: DeliveryRow[]) {
     return 4;
   }
 
+  const customLegendHTML = `
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sticky top-4">
+      <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 border-b border-slate-200 dark:border-slate-600 pb-2 uppercase tracking-wider" data-i18n="legendTitle">${t("legendTitle")}</h4>
+      <div class="space-y-3 text-sm text-slate-600 dark:text-slate-300 font-medium">
+        ${statusLabels.map((lbl, idx) => `
+          <div class="flex items-center">
+            <span class="w-4 h-4 rounded-md mr-3 shadow-sm border border-slate-200/20" style="background-color: ${Object.values(statusColors)[idx]}"></span>
+            <span>${lbl}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
   // 1. Overall Chart (Doughnut)
   let overallCounts = [0, 0, 0, 0, 0];
   data.forEach((row) => {
     let s = normalizeText(row["STATUS"] || "PENDENTE");
     overallCounts[getStatusIndex(s)]++;
   });
+
+  const total = data.length;
+  const delivered = overallCounts[0];
+  const inTransit = overallCounts[1];
+  const waiting = overallCounts[2];
+  const pending = overallCounts[3];
+  
+  const totalActive = delivered + pending; // Simple proxy for efficiency: delivered / (delivered + pending)
+  const efficiency = totalActive > 0 ? ((delivered / totalActive) * 100).toFixed(1) : "0.0";
+  const progressPct = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
+
+  // Clear previous charts wrapper
+  chartsContent.innerHTML = `
+    <div class="space-y-6 pb-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-6 p-4">
+        
+        <!-- OP OVERVIEW CARD -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:col-span-1 xl:col-span-1">
+          <!-- KPIs topbar -->
+          <div class="flex gap-2 border-b border-slate-100 pb-2 mb-2 justify-around">
+            <div class="bg-slate-50 dark:bg-slate-900 rounded p-1 text-center shadow-sm flex-1">
+              <div class="text-[#0f172a] dark:text-slate-100 text-base font-black">${efficiency}%</div>
+              <div class="text-[9px] font-bold text-slate-400" data-i18n="efic">${t("efic")}</div>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-900 rounded p-1 text-center shadow-sm flex-1">
+              <div class="text-[#0f172a] dark:text-slate-100 text-base font-black">${progressPct}%</div>
+              <div class="text-[9px] font-bold text-slate-400" data-i18n="prog">${t("prog")}</div>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-900 rounded p-1 text-center shadow-sm flex-1 flex flex-col justify-center">
+              <div class="text-blue-600 dark:text-blue-400 text-base font-black">${pending}</div>
+              <div class="text-[9px] font-bold text-slate-400" data-i18n="pend">${t("pend")}</div>
+            </div>
+          </div>
+
+          <div class="flex-grow min-w-0">
+            <h3 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 text-center" data-i18n="chartsOverviewTitle">${t("chartsOverviewTitle")}</h3>
+            <div class="relative h-40">
+               <canvas id="overallChartCanvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- LOT PROGRESS CARD -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-1 xl:col-span-4 overflow-hidden">
+          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsLotProgressTitle">${t("chartsLotProgressTitle")}</h3>
+          <div class="relative h-64 w-full cursor-grab active:cursor-grabbing overflow-x-auto pb-2">
+             <div style="min-width: 800px; height: 100%;">
+                <canvas id="lotChartCanvas"></canvas>
+             </div>
+          </div>
+        </div>
+
+        <!-- MODEL CARD -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-2 xl:col-span-1">
+          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="modelsTitle">${t("modelsTitle")}</h3>
+          <div class="relative h-64">
+             <canvas id="modelChartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col lg:flex-row gap-6 p-4">
+        <div class="flex-grow space-y-8 min-w-0">
+          <!-- Carriers -->
+          <div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsCarrierTitle">${t("chartsCarrierTitle")}</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4" id="carrier-charts-grid"></div>
+          </div>
+
+          <!-- Warehouses -->
+          <div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsWarehouseTitle">${t("chartsWarehouseTitle")}</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4" id="warehouse-charts-grid"></div>
+          </div>
+        </div>
+
+        <div class="w-full lg:w-64 shrink-0">
+          ${customLegendHTML}
+        </div>
+      </div>
+
+      <!-- Lot Justifications -->
+      <div class="p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsJustificationTitle">${t("chartsJustificationTitle")}</h3>
+          <div id="lot-justifications" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </div>
+      </div>
+    </div>
+  `;
 
   const ctxOverall = document.getElementById("overallChartCanvas") as HTMLCanvasElement;
   if (ctxOverall) {
@@ -1656,7 +1757,7 @@ function renderCharts(data: DeliveryRow[]) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: "right", labels: { color: "#64748b", font: { size: 10 } } },
+          legend: { position: "bottom", labels: { color: "#64748b", font: { size: 10 } } },
           tooltip: {
             callbacks: {
               label: function(context: any) {
@@ -1694,6 +1795,9 @@ function renderCharts(data: DeliveryRow[]) {
 
   const ctxLot = document.getElementById("lotChartCanvas") as HTMLCanvasElement;
   if (ctxLot) {
+    const minW = Math.max(800, lotLabels.length * 40);
+    ctxLot.parentElement!.style.minWidth = `${minW}px`;
+    
     lotChart = new Chart(ctxLot, {
       type: "bar",
       data: {
@@ -1740,6 +1844,66 @@ function renderCharts(data: DeliveryRow[]) {
     });
   }
 
+  // 2.5 Model Chart (Bar)
+  const modelStats: Record<string, number> = {};
+  data.forEach((row) => {
+    const modelStr = String(row["MODEL"] || "").trim().toUpperCase();
+    const model = modelStr ? modelStr : "OUTROS";
+    if (!modelStats[model]) modelStats[model] = 0;
+    modelStats[model]++;
+  });
+
+  const sortedModels = Object.keys(modelStats).sort((a,b) => modelStats[b] - modelStats[a]); // Sort descending
+  const modelLabels = sortedModels;
+  const modelData = sortedModels.map(m => modelStats[m]);
+
+  const ctxModel = document.getElementById("modelChartCanvas") as HTMLCanvasElement;
+  if (ctxModel) {
+    modelChart = new Chart(ctxModel, {
+      type: "bar",
+      data: {
+        labels: modelLabels,
+        datasets: [{
+          label: "Quantidade",
+          data: modelData,
+          backgroundColor: "#8b5cf6",
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { 
+            beginAtZero: true,
+            ticks: { color: "#64748b" },
+            grid: { color: "rgba(100, 116, 139, 0.1)" }
+          },
+          x: { 
+            ticks: { color: "#64748b" },
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            color: '#fff',
+            anchor: 'end',
+            align: 'bottom',
+            formatter: (value: number) => value > 0 ? value : ''
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return "Qtd: " + context.parsed.y;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   // 3. Carrier Charts (Pizza)
   const carrierStats: Record<string, number[]> = {};
   data.forEach((row) => {
@@ -1754,11 +1918,20 @@ function renderCharts(data: DeliveryRow[]) {
     Object.keys(carrierStats).sort().forEach((carrier, idx) => {
       const containerId = `carrier-chart-${idx}`;
       const total = carrierStats[carrier].reduce((a, b) => a + b, 0);
+      const cDelivered = carrierStats[carrier][0] || 0;
+      const cPending = carrierStats[carrier][3] || 0;
+      const cTotalActive = cDelivered + cPending;
+      const cEfficiency = cTotalActive > 0 ? ((cDelivered / cTotalActive) * 100).toFixed(1) : "0.0";
+
       carrierGrid.insertAdjacentHTML("beforeend", `
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+        <div class="flex flex-col items-center">
           <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate" title="${carrier}">${carrier} (${total} cont)</h4>
-          <div class="relative h-48">
+          <div class="relative h-48 w-full">
             <canvas id="${containerId}"></canvas>
+          </div>
+          <div class="mt-2 text-center">
+            <span class="text-lg font-black text-[#0f172a] dark:text-slate-100">${cEfficiency}%</span>
+            <div class="text-[10px] font-bold text-slate-400" data-i18n="efic">${t("efic")}</div>
           </div>
         </div>
       `);
@@ -1766,28 +1939,45 @@ function renderCharts(data: DeliveryRow[]) {
       const ctx = document.getElementById(containerId) as HTMLCanvasElement;
       if (ctx) {
         const cChart = new Chart(ctx, {
-          type: "pie",
+          type: "doughnut",
           data: {
             labels: statusLabels,
             datasets: [{
               data: carrierStats[carrier],
               backgroundColor: Object.values(statusColors),
-              borderWidth: 1,
+              borderWidth: 2,
               borderColor: "#ffffff"
             }]
           },
           options: {
+            cutout: '45%',
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: 0 },
             plugins: {
-              legend: { position: "right", labels: { color: "#64748b", font: { size: 9 }, boxWidth: 10 } },
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                titleFont: { size: 13 },
+                bodyFont: { size: 13, weight: 'bold' },
+                padding: 12,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function(context: any) {
+                    return ` ${context.label}: ${context.raw} cont.`;
+                  }
+                }
+              },
               datalabels: {
-                  color: '#fff',
-                  font: { size: 9 },
+                  color: '#ffffff',
+                  font: { size: 11, weight: 'bold' },
+                  textAlign: 'center',
                   formatter: (value: number, context: any) => {
                       if(value === 0) return '';
                       let sum = context.chart.data.datasets[0].data.reduce((a:number, b:number) => a + b, 0);
-                      return (value * 100 / sum).toFixed(0) + "%";
+                      let pct = (value * 100 / sum).toFixed(0);
+                      if (Number(pct) <= 5) return value;
+                      return `${value}\n(${pct}%)`;
                   }
               }
             }
@@ -1813,9 +2003,9 @@ function renderCharts(data: DeliveryRow[]) {
       const containerId = `warehouse-chart-${idx}`;
       const total = warehouseStats[wh].reduce((a, b) => a + b, 0);
       warehouseGrid.insertAdjacentHTML("beforeend", `
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+        <div class="flex flex-col items-center">
           <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate" title="${wh}">${wh} (${total} cont)</h4>
-          <div class="relative h-48">
+          <div class="relative h-48 w-full">
             <canvas id="${containerId}"></canvas>
           </div>
         </div>
@@ -1824,28 +2014,45 @@ function renderCharts(data: DeliveryRow[]) {
       const ctx = document.getElementById(containerId) as HTMLCanvasElement;
       if (ctx) {
         const wChart = new Chart(ctx, {
-          type: "pie",
+          type: "doughnut",
           data: {
             labels: statusLabels,
             datasets: [{
               data: warehouseStats[wh],
               backgroundColor: Object.values(statusColors),
-              borderWidth: 1,
+              borderWidth: 2,
               borderColor: "#ffffff"
             }]
           },
           options: {
+            cutout: '45%',
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: 0 },
             plugins: {
-              legend: { position: "right", labels: { color: "#64748b", font: { size: 9 }, boxWidth: 10 } },
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                titleFont: { size: 13 },
+                bodyFont: { size: 13, weight: 'bold' },
+                padding: 12,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function(context: any) {
+                    return ` ${context.label}: ${context.raw} cont.`;
+                  }
+                }
+              },
               datalabels: {
-                  color: '#fff',
-                  font: { size: 9 },
+                  color: '#ffffff',
+                  font: { size: 11, weight: 'bold' },
+                  textAlign: 'center',
                   formatter: (value: number, context: any) => {
                       if(value === 0) return '';
                       let sum = context.chart.data.datasets[0].data.reduce((a:number, b:number) => a + b, 0);
-                      return (value * 100 / sum).toFixed(0) + "%";
+                      let pct = (value * 100 / sum).toFixed(0);
+                      if (Number(pct) <= 5) return value;
+                      return `${value}\n(${pct}%)`;
                   }
               }
             }
