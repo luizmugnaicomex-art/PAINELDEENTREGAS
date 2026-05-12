@@ -16,6 +16,8 @@
 declare const firebase: any;
 declare const XLSX: any;
 declare const jspdf: any;
+declare const Chart: any;
+declare const ChartDataLabels: any;
 
 /* ----------------------------- FIREBASE SAFE ------------------------------ */
 const env = (import.meta as any).env || (process as any).env || {};
@@ -46,6 +48,8 @@ const lastUpdate = document.getElementById("last-update") as HTMLParagraphElemen
 const placeholder = document.getElementById("placeholder") as HTMLDivElement;
 const summaryStats = document.getElementById("summary-stats") as HTMLDivElement;
 const deliveryDashboard = document.getElementById("delivery-dashboard") as HTMLDivElement;
+const viewModeTabs = document.getElementById("view-mode-tabs") as HTMLDivElement;
+const deliveriesWrapper = document.getElementById("deliveries-wrapper") as HTMLDivElement;
 const deliveryTabs = document.getElementById("delivery-tabs") as HTMLDivElement;
 const deliveryContent = document.getElementById("delivery-content") as HTMLDivElement;
 const exportExcelBtn = document.getElementById("export-excel-btn") as HTMLButtonElement;
@@ -139,6 +143,8 @@ const translations = {
     tableHeaderLot: "Lote",
     tableHeaderModel: "Modelo",
     tableHeaderOperation: "Escopo da Operação",
+    tableHeaderTotal: "Total",
+    tableHeaderOverallTotal: "Total Geral",
     STATUS_PENDENTE: "Pendente",
     STATUS_A_CAMINHO: "A Caminho",
     STATUS_ADIADO: "Adiado",
@@ -155,7 +161,15 @@ const translations = {
     performanceTitle: "Desempenho por Transportadora",
     badgeBattery: "Bateria",
     deliveriesTab: "Entregas",
-    arrivalsTab: "Arrivals per Lot",
+    arrivalsTab: "Chegadas por Lote",
+    chartsTab: "Gráficos (Operação)",
+    chartsOverviewTitle: "Visão Geral da Operação",
+    chartsLotProgressTitle: "Progresso por Lote",
+    chartsCarrierTitle: "Desempenho por Transportadora",
+    chartsWarehouseTitle: "Status por Armazém Afiançado",
+    chartsJustificationTitle: "Justificativas por Lote",
+    chartsJustificationPlaceholder: "Justificativa...",
+    chartsOther: "Outros (Adiado/Cancelado)",
     pdfTitle: "Programação de Entregas de Contêineres",
     pdfGeneratedOn: (date: string) => `Relatório gerado em: ${date}`,
     pdfPage: (page: number, total: number) => `Página ${page} de ${total}`,
@@ -234,6 +248,8 @@ const translations = {
     tableHeaderLot: "LOT",
     tableHeaderModel: "Model",
     tableHeaderOperation: "Operation Scope",
+    tableHeaderTotal: "Total",
+    tableHeaderOverallTotal: "Overall Total",
     STATUS_PENDENTE: "Pending",
     STATUS_A_CAMINHO: "In Transit",
     STATUS_ADIADO: "Postponed",
@@ -249,6 +265,16 @@ const translations = {
     detailsCompany: "Carrier",
     performanceTitle: "Carrier Performance",
     badgeBattery: "Battery",
+    deliveriesTab: "Deliveries",
+    arrivalsTab: "Arrivals per Lot",
+    chartsTab: "Charts (Operation)",
+    chartsOverviewTitle: "Operation Overview",
+    chartsLotProgressTitle: "Progress by Lot",
+    chartsCarrierTitle: "Carrier Performance",
+    chartsWarehouseTitle: "Bonded Warehouse Status",
+    chartsJustificationTitle: "Lot Justifications",
+    chartsJustificationPlaceholder: "Justification...",
+    chartsOther: "Other (Postponed/Canceled)",
     pdfTitle: "Container Delivery Schedule",
     pdfGeneratedOn: (date: string) => `Report generated on: ${date}`,
     pdfPage: (page: number, total: number) => `Page ${page} of ${total}`,
@@ -326,6 +352,8 @@ const translations = {
     tableHeaderLot: "批号 (LOT)",
     tableHeaderModel: "型号",
     tableHeaderOperation: "操作范围",
+    tableHeaderTotal: "总计",
+    tableHeaderOverallTotal: "总计",
     STATUS_PENDENTE: "待处理",
     STATUS_A_CAMINHO: "运输中",
     STATUS_ADIADO: "已推迟",
@@ -341,6 +369,16 @@ const translations = {
     detailsCompany: "运输公司",
     performanceTitle: "承运人绩效",
     badgeBattery: "电池",
+    deliveriesTab: "交货",
+    arrivalsTab: "每批到达",
+    chartsTab: "图表（运营）",
+    chartsOverviewTitle: "运营概览",
+    chartsLotProgressTitle: "按批次进度",
+    chartsCarrierTitle: "承运人绩效",
+    chartsWarehouseTitle: "保税仓库状态",
+    chartsJustificationTitle: "批次说明",
+    chartsJustificationPlaceholder: "说明...",
+    chartsOther: "其他 (推迟/取消)",
     pdfTitle: "集装箱交付计划",
     pdfGeneratedOn: (date: string) => `报告生成于：${date}`,
     pdfPage: (page: number, total: number) => `第 ${page} 页，共 ${total} 页`,
@@ -386,6 +424,10 @@ let activeStatusFilter: string | null = null;
 let showOnlyBattery: boolean = false;
 let showOnlyKd: boolean = false;
 let showOnlyProject: boolean = false;
+let overallChart: any = null;
+let lotChart: any = null;
+let carrierCharts: any[] = [];
+let warehouseCharts: any[] = [];
 
 /* ------------------------------ STATIC TEXT -------------------------------- */
 function updateStaticText() {
@@ -836,6 +878,8 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   }
 
   renderDeliveryDashboard(filteredData, activeTabId);
+  renderArrivalsTable(); // Keep Arrivals in sync
+  renderCharts(filteredData);
   updateStats();
 }
 
@@ -1393,10 +1437,10 @@ deliveryContent?.addEventListener("change", async (e) => {
 });
 
 /* ------------------------------ TABS -------------------------------------- */
-deliveryTabs?.addEventListener("click", (e) => {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".tab-btn");
+viewModeTabs?.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".view-tab-btn");
   if (btn) {
-    deliveryTabs.querySelectorAll(".tab-btn").forEach((b) => {
+    viewModeTabs.querySelectorAll(".view-tab-btn").forEach((b) => {
       b.classList.remove("border-blue-500", "text-blue-600");
       b.classList.add("border-transparent", "text-slate-500");
     });
@@ -1404,12 +1448,36 @@ deliveryTabs?.addEventListener("click", (e) => {
     btn.classList.remove("border-transparent", "text-slate-500");
 
     const target = btn.dataset.tab;
-    deliveryContent.classList.toggle("hidden", target !== "deliveries");
+    deliveriesWrapper?.classList.toggle("hidden", target !== "deliveries");
+    
     const arrivalsContent = document.getElementById("arrivals-content");
     arrivalsContent?.classList.toggle("hidden", target !== "arrivals");
     
+    const chartsContent = document.getElementById("charts-content");
+    chartsContent?.classList.toggle("hidden", target !== "charts");
+    
     if (target === "arrivals") {
       renderArrivalsTable();
+    } else if (target === "charts") {
+      renderCharts(deliveryData);
+    }
+  }
+});
+
+deliveryTabs?.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".tab-btn");
+  if (btn) {
+    deliveryTabs.querySelectorAll(".tab-btn").forEach((b) => {
+      b.classList.remove("active", "border-blue-500", "text-blue-600");
+      b.classList.add("border-transparent", "text-slate-500");
+    });
+    btn.classList.add("active", "border-blue-500", "text-blue-600");
+    btn.classList.remove("border-transparent", "text-slate-500");
+
+    const target = btn.dataset.target;
+    if (target) {
+      document.querySelectorAll(".date-card").forEach((c) => c.classList.add("hidden"));
+      document.getElementById(target)?.classList.remove("hidden");
     }
   }
 });
@@ -1462,6 +1530,363 @@ summaryStats?.addEventListener("click", (e) => {
   }
 });
 
+function renderCharts(data: DeliveryRow[]) {
+  const chartsContent = document.getElementById("charts-content");
+  if (!chartsContent) return;
+
+  // Destroy previous charts if any
+  if (overallChart) {
+    overallChart.destroy();
+    overallChart = null;
+  }
+  if (lotChart) {
+    lotChart.destroy();
+    lotChart = null;
+  }
+
+  // Destroy previous dynamic charts
+  carrierCharts.forEach(c => c.destroy());
+  carrierCharts = [];
+  warehouseCharts.forEach(c => c.destroy());
+  warehouseCharts = [];
+
+  // Register ChartDataLabels plugin if not already registered globally
+  if (typeof ChartDataLabels !== "undefined") {
+    Chart.register(ChartDataLabels);
+    Chart.defaults.set('plugins.datalabels', {
+      color: '#ffffff',
+      font: { weight: 'bold', size: 10 },
+      formatter: (value: number, ctx: any) => {
+        if (value === 0) return '';
+        let sum = 0;
+        let dataArr = ctx.chart.data.datasets[0].data;
+        dataArr.map((data: number) => {
+            sum += data;
+        });
+        let percentage = sum > 0 ? (value * 100 / sum).toFixed(1) + "%" : "0%";
+        return percentage;
+      }
+    });
+  }
+
+  // Clear previous charts wrapper
+  chartsContent.innerHTML = `
+    <div class="space-y-6 pb-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsOverviewTitle">${t("chartsOverviewTitle")}</h3>
+          <div class="relative h-64">
+             <canvas id="overallChartCanvas"></canvas>
+          </div>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsLotProgressTitle">${t("chartsLotProgressTitle")}</h3>
+          <div class="relative h-64">
+             <canvas id="lotChartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carriers -->
+      <div class="p-4">
+        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsCarrierTitle">${t("chartsCarrierTitle")}</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="carrier-charts-grid"></div>
+      </div>
+
+      <!-- Warehouses -->
+      <div class="p-4">
+        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsWarehouseTitle">${t("chartsWarehouseTitle")}</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="warehouse-charts-grid"></div>
+      </div>
+
+      <!-- Lot Justifications -->
+      <div class="p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsJustificationTitle">${t("chartsJustificationTitle")}</h3>
+          <div id="lot-justifications" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (typeof Chart === "undefined") {
+     console.warn("Chart.js is not loaded.");
+     return;
+  }
+
+  const statusColors: Record<string, string> = {
+    "ENTREGUE": "#22c55e",
+    "A CAMINHO": "#3b82f6",
+    "AGUARDANDO DESOVA": "#eab308",
+    "PENDENTE": "#64748b",
+    "OUTROS": "#ef4444"
+  };
+
+  const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), t("pending"), t("chartsOther")];
+  
+  function getStatusIndex(s: string) {
+    if (s === "ENTREGUE") return 0;
+    if (s === "A CAMINHO") return 1;
+    if (s === "AGUARDANDO DESOVA") return 2;
+    if (s === "PENDENTE") return 3;
+    return 4;
+  }
+
+  // 1. Overall Chart (Doughnut)
+  let overallCounts = [0, 0, 0, 0, 0];
+  data.forEach((row) => {
+    let s = normalizeText(row["STATUS"] || "PENDENTE");
+    overallCounts[getStatusIndex(s)]++;
+  });
+
+  const ctxOverall = document.getElementById("overallChartCanvas") as HTMLCanvasElement;
+  if (ctxOverall) {
+    overallChart = new Chart(ctxOverall, {
+      type: "doughnut",
+      data: {
+        labels: statusLabels,
+        datasets: [{
+          data: overallCounts,
+          backgroundColor: Object.values(statusColors),
+          borderWidth: 1,
+          borderColor: "#ffffff"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right", labels: { color: "#64748b", font: { size: 10 } } },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                let label = context.label || '';
+                if (label) label += ': ';
+                let value = context.parsed || 0;
+                let total = context.chart._metasets[context.datasetIndex].total;
+                let percentage = total > 0 ? Math.round(value / total * 100) : 0;
+                return label + value + ' (' + percentage + '%)';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // 2. Lot Progress (Bar)
+  const lotStats: Record<string, { total: number; done: number }> = {};
+  data.forEach((row) => {
+    const lot = String(row["LOT"] || "N/A");
+    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0 };
+    lotStats[lot].total++;
+    const status = normalizeText(row["STATUS"] || "PENDENTE");
+    if (status === "ENTREGUE") lotStats[lot].done++;
+  });
+
+  const sortedLots = Object.keys(lotStats).sort();
+  const lotLabels = sortedLots;
+  const lotData = sortedLots.map((lot) => {
+    let total = lotStats[lot].total;
+    let done = lotStats[lot].done;
+    return total > 0 ? (done / total) * 100 : 0;
+  });
+
+  const ctxLot = document.getElementById("lotChartCanvas") as HTMLCanvasElement;
+  if (ctxLot) {
+    lotChart = new Chart(ctxLot, {
+      type: "bar",
+      data: {
+        labels: lotLabels,
+        datasets: [{
+          label: "% " + t("delivered"),
+          data: lotData,
+          backgroundColor: lotData.map(v => v === 100 ? "#22c55e" : "#3b82f6"),
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { 
+            beginAtZero: true, 
+            max: 100,
+            ticks: { color: "#64748b", callback: (val: number) => val + "%" },
+            grid: { color: "rgba(100, 116, 139, 0.1)" }
+          },
+          x: { 
+            ticks: { color: "#64748b" },
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            color: '#fff',
+            anchor: 'end',
+            align: 'bottom',
+            formatter: (value: number) => value > 0 ? value.toFixed(0) + '%' : ''
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return context.parsed.y.toFixed(1) + "% (" + lotStats[context.label].done + " de " + lotStats[context.label].total + ")";
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // 3. Carrier Charts (Pizza)
+  const carrierStats: Record<string, number[]> = {};
+  data.forEach((row) => {
+    const carrier = String(row["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase() || "N/A";
+    if (!carrierStats[carrier]) carrierStats[carrier] = [0, 0, 0, 0, 0];
+    let s = normalizeText(row["STATUS"] || "PENDENTE");
+    carrierStats[carrier][getStatusIndex(s)]++;
+  });
+
+  const carrierGrid = document.getElementById("carrier-charts-grid");
+  if (carrierGrid) {
+    Object.keys(carrierStats).sort().forEach((carrier, idx) => {
+      const containerId = `carrier-chart-${idx}`;
+      carrierGrid.insertAdjacentHTML("beforeend", `
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 text-center truncate" title="${carrier}">${carrier}</h4>
+          <div class="relative h-48">
+            <canvas id="${containerId}"></canvas>
+          </div>
+        </div>
+      `);
+      
+      const ctx = document.getElementById(containerId) as HTMLCanvasElement;
+      if (ctx) {
+        const cChart = new Chart(ctx, {
+          type: "pie",
+          data: {
+            labels: statusLabels,
+            datasets: [{
+              data: carrierStats[carrier],
+              backgroundColor: Object.values(statusColors),
+              borderWidth: 1,
+              borderColor: "#ffffff"
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "right", labels: { color: "#64748b", font: { size: 9 }, boxWidth: 10 } },
+              datalabels: {
+                  color: '#fff',
+                  font: { size: 9 },
+                  formatter: (value: number, context: any) => {
+                      if(value === 0) return '';
+                      let sum = context.chart.data.datasets[0].data.reduce((a:number, b:number) => a + b, 0);
+                      return (value * 100 / sum).toFixed(0) + "%";
+                  }
+              }
+            }
+          }
+        });
+        carrierCharts.push(cChart);
+      }
+    });
+  }
+
+  // 4. Warehouse Charts (Pizza)
+  const warehouseStats: Record<string, number[]> = {};
+  data.forEach((row) => {
+    const wh = String(row["BONDED WAREHOUSE"] || "N/A").trim().toUpperCase() || "N/A";
+    if (!warehouseStats[wh]) warehouseStats[wh] = [0, 0, 0, 0, 0];
+    let s = normalizeText(row["STATUS"] || "PENDENTE");
+    warehouseStats[wh][getStatusIndex(s)]++;
+  });
+
+  const warehouseGrid = document.getElementById("warehouse-charts-grid");
+  if (warehouseGrid) {
+    Object.keys(warehouseStats).sort().forEach((wh, idx) => {
+      const containerId = `warehouse-chart-${idx}`;
+      warehouseGrid.insertAdjacentHTML("beforeend", `
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 text-center truncate" title="${wh}">${wh}</h4>
+          <div class="relative h-48">
+            <canvas id="${containerId}"></canvas>
+          </div>
+        </div>
+      `);
+      
+      const ctx = document.getElementById(containerId) as HTMLCanvasElement;
+      if (ctx) {
+        const wChart = new Chart(ctx, {
+          type: "pie",
+          data: {
+            labels: statusLabels,
+            datasets: [{
+              data: warehouseStats[wh],
+              backgroundColor: Object.values(statusColors),
+              borderWidth: 1,
+              borderColor: "#ffffff"
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "right", labels: { color: "#64748b", font: { size: 9 }, boxWidth: 10 } },
+              datalabels: {
+                  color: '#fff',
+                  font: { size: 9 },
+                  formatter: (value: number, context: any) => {
+                      if(value === 0) return '';
+                      let sum = context.chart.data.datasets[0].data.reduce((a:number, b:number) => a + b, 0);
+                      return (value * 100 / sum).toFixed(0) + "%";
+                  }
+              }
+            }
+          }
+        });
+        warehouseCharts.push(wChart);
+      }
+    });
+  }
+
+  // 5. Lot Justifications
+  const lotJustificationsGrid = document.getElementById("lot-justifications");
+  if (lotJustificationsGrid) {
+    sortedLots.forEach((lot) => {
+      const savedKey = `justification_${lot}`;
+      const savedVal = localStorage.getItem(savedKey) || "";
+      
+      lotJustificationsGrid.insertAdjacentHTML("beforeend", `
+        <div class="flex flex-col space-y-1">
+          <label class="text-xs font-bold text-slate-600 dark:text-slate-300">Lote ${lot}</label>
+          <textarea 
+            class="w-full text-sm p-2 rounded border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+            rows="2" 
+            placeholder="${t("chartsJustificationPlaceholder")}"
+            data-lot="${lot}"
+          >${savedVal}</textarea>
+        </div>
+      `);
+    });
+
+    // Add event listener to save justification on blur/input
+    lotJustificationsGrid.querySelectorAll("textarea").forEach((ta) => {
+      ta.addEventListener("input", (e) => {
+        const target = e.target as HTMLTextAreaElement;
+        const lot = target.dataset.lot;
+        if (lot) {
+           localStorage.setItem(`justification_${lot}`, target.value);
+        }
+      });
+    });
+  }
+}
+
 /* ----------------------- XLSX PARSER (IMPROVED) ---------------------------- */
 function renderArrivalsTable() {
   const arrivalsContent = document.getElementById("arrivals-content");
@@ -1469,15 +1894,21 @@ function renderArrivalsTable() {
 
   const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
   const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
+  const statusKeys: Record<string, string> = {
+    "A CAMINHO": "STATUS_A_CAMINHO",
+    "ADIADO": "STATUS_ADIADO",
+    "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA",
+    "ENTREGUE": "STATUS_ENTREGUE"
+  };
 
   const tableHtml = `
     <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
       <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300">
         <thead class="bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600">
           <tr>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">Lote</th>
-            ${statuses.map((s) => `<th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${s}</th>`).join("")}
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">Total</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">${t("tableHeaderLot")}</th>
+            ${statuses.map((s) => `<th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">${t(statusKeys[s] as TranslationKey)}</th>`).join("")}
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">${t("tableHeaderTotal")}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
@@ -1502,7 +1933,7 @@ function renderArrivalsTable() {
         </tbody>
         <tfoot class="bg-slate-50 dark:bg-slate-700 border-t border-slate-200 dark:border-slate-600 font-bold">
           <tr>
-            <td class="px-4 py-3 text-slate-800 dark:text-slate-100">Total Geral</td>
+            <td class="px-4 py-3 text-slate-800 dark:text-slate-100">${t("tableHeaderOverallTotal")}</td>
             ${statuses.map((s) => `<td class="px-4 py-3 text-slate-800 dark:text-slate-100">${deliveryData.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length}</td>`).join("")}
             <td class="px-4 py-3 text-slate-800 dark:text-slate-100">${deliveryData.length}</td>
           </tr>
