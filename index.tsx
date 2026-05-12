@@ -22,12 +22,12 @@ declare const ChartDataLabels: any;
 /* ----------------------------- FIREBASE SAFE ------------------------------ */
 const env = (import.meta as any).env || (process as any).env || {};
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "",
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "",
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "",
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: env.VITE_FIREBASE_APP_ID || "",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 let db: any = null;
@@ -1753,9 +1753,10 @@ function renderCharts(data: DeliveryRow[]) {
   if (carrierGrid) {
     Object.keys(carrierStats).sort().forEach((carrier, idx) => {
       const containerId = `carrier-chart-${idx}`;
+      const total = carrierStats[carrier].reduce((a, b) => a + b, 0);
       carrierGrid.insertAdjacentHTML("beforeend", `
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 text-center truncate" title="${carrier}">${carrier}</h4>
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate" title="${carrier}">${carrier} (${total} cont)</h4>
           <div class="relative h-48">
             <canvas id="${containerId}"></canvas>
           </div>
@@ -1810,9 +1811,10 @@ function renderCharts(data: DeliveryRow[]) {
   if (warehouseGrid) {
     Object.keys(warehouseStats).sort().forEach((wh, idx) => {
       const containerId = `warehouse-chart-${idx}`;
+      const total = warehouseStats[wh].reduce((a, b) => a + b, 0);
       warehouseGrid.insertAdjacentHTML("beforeend", `
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 text-center truncate" title="${wh}">${wh}</h4>
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate" title="${wh}">${wh} (${total} cont)</h4>
           <div class="relative h-48">
             <canvas id="${containerId}"></canvas>
           </div>
