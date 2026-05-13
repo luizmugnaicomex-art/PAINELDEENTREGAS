@@ -27,7 +27,11 @@ declare const Chart: any;
 declare const ChartDataLabels: any;
 
 /* ----------------------------- FIREBASE SAFE ------------------------------ */
-const env = (import.meta as any).env || (process as any).env || {};
+const getEnv = (key: string): string => {
+  const env = (import.meta as any).env || (process as any).env || {};
+  return env[key] || "";
+};
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -36,6 +40,7 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+
 
 let db: any = null;
 try {
@@ -1199,19 +1204,21 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
             deliveries.reduce((acc, d) => {
               const carrier = String(d["TRANSPORTATION COMPANY"] || "N/A").trim() || "N/A";
               const lot = String(d["LOT"] || "N/A");
+              const bl = String(d["BL"] || "").trim();
               if (!acc[carrier]) acc[carrier] = {};
-              if (!acc[carrier][lot]) acc[carrier][lot] = { total: 0, delivered: 0 };
+              if (!acc[carrier][lot]) acc[carrier][lot] = { total: 0, delivered: 0, bls: new Set<string>() };
               acc[carrier][lot].total++;
               if (normalizeText(d["STATUS"] || "") === "ENTREGUE") acc[carrier][lot].delivered++;
+              if (bl) acc[carrier][lot].bls.add(bl);
               return acc;
-            }, {} as Record<string, Record<string, { total: number; delivered: number }>>)
+            }, {} as Record<string, Record<string, { total: number; delivered: number; bls: Set<string> }>>)
           )
             .map(([carrier, lots]) => {
               const lotHTML = Object.entries(lots)
                 .map(([lot, stats]) => {
                   return `
                     <div class="lot-details border-t border-slate-100 dark:border-slate-700 mt-2 pt-2 hidden">
-                        <div class="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Lote ${lot}</div>
+                        <div class="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Lote ${lot} ${stats.bls && stats.bls.size > 0 ? "- " + Array.from(stats.bls).join(", ") : ""}</div>
                         <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
                            <span>Agendados: <strong class="text-slate-700 dark:text-slate-200">${stats.total}</strong></span>
                            <span>Entregues: <strong class="text-green-600 dark:text-green-400">${stats.delivered}</strong></span>
@@ -1654,9 +1661,10 @@ function renderCharts(data: DeliveryRow[]) {
   const inTransit = overallCounts[1];
   const waiting = overallCounts[2];
   const pending = overallCounts[3];
+  const canceled = overallCounts[4];
   
-  const totalActive = delivered + pending; // Simple proxy for efficiency: delivered / (delivered + pending)
-  const efficiency = totalActive > 0 ? ((delivered / totalActive) * 100).toFixed(1) : "0.0";
+  const resolved = delivered + canceled;
+  const efficiency = resolved > 0 ? ((delivered / resolved) * 100).toFixed(1) : "0.0";
   const progressPct = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
 
   // Clear previous charts wrapper
@@ -1775,13 +1783,21 @@ function renderCharts(data: DeliveryRow[]) {
   }
 
   // 2. Lot Progress (Bar)
-  const lotStats: Record<string, { total: number; done: number }> = {};
+  const lotStats: Record<string, { total: number; done: number; carriers: Set<string>; operations: Set<string> }> = {};
   data.forEach((row) => {
     const lot = String(row["LOT"] || "N/A");
-    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0 };
+    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, carriers: new Set(), operations: new Set() };
     lotStats[lot].total++;
     const status = normalizeText(row["STATUS"] || "PENDENTE");
     if (status === "ENTREGUE") lotStats[lot].done++;
+    const carrier = String(row["TRANSPORTATION COMPANY"] || row["CARRIER"] || "").trim().toUpperCase();
+    if (carrier) lotStats[lot].carriers.add(carrier);
+    let operation = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
+    if (operation) {
+      if (operation.includes("UNLOAD") || operation.includes("DESOVA")) operation = "UNLOAD";
+      else if (operation.includes("SWAP")) operation = "SWAP";
+      lotStats[lot].operations.add(operation);
+    }
   });
 
   const sortedLots = Object.keys(lotStats).sort();
@@ -1835,6 +1851,17 @@ function renderCharts(data: DeliveryRow[]) {
             callbacks: {
               label: function(context: any) {
                 return context.parsed.y.toFixed(1) + "% (" + lotStats[context.label].done + " de " + lotStats[context.label].total + ")";
+              },
+              afterLabel: function(context: any) {
+                const stat = lotStats[context.label];
+                let texts = [];
+                if (stat && stat.carriers.size > 0) {
+                  texts.push(t("detailsCompany") + ": " + Array.from(stat.carriers).join(", "));
+                }
+                if (stat && stat.operations.size > 0) {
+                  texts.push(t("tableHeaderOperation") + ": " + Array.from(stat.operations).join(", "));
+                }
+                return texts;
               }
             }
           }
@@ -1918,9 +1945,9 @@ function renderCharts(data: DeliveryRow[]) {
       const containerId = `carrier-chart-${idx}`;
       const total = carrierStats[carrier].reduce((a, b) => a + b, 0);
       const cDelivered = carrierStats[carrier][0] || 0;
-      const cPending = carrierStats[carrier][3] || 0;
-      const cTotalActive = cDelivered + cPending;
-      const cEfficiency = cTotalActive > 0 ? ((cDelivered / cTotalActive) * 100).toFixed(1) : "0.0";
+      const cCanceled = carrierStats[carrier][4] || 0;
+      const cResolved = cDelivered + cCanceled;
+      const cEfficiency = cResolved > 0 ? ((cDelivered / cResolved) * 100).toFixed(1) : "0.0";
 
       carrierGrid.insertAdjacentHTML("beforeend", `
         <div class="flex flex-col items-center">
@@ -2339,7 +2366,55 @@ exportExcelBtn?.addEventListener("click", async () => {
 
   const ws = XLSX.utils.json_to_sheet(out);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Deliveries");
+  XLSX.utils.book_append_sheet(wb, ws, t("deliveriesTab"));
+
+  // Create Arrivals per Lot sheet
+  try {
+    const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
+    const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
+    const statusKeys: Record<string, string> = {
+      "A CAMINHO": "STATUS_A_CAMINHO",
+      "ADIADO": "STATUS_ADIADO",
+      "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA",
+      "ENTREGUE": "STATUS_ENTREGUE"
+    };
+
+    const arrivalsOut = lotsFromData.map((lot) => {
+      const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
+      const row: any = {
+        [t("tableHeaderLot")]: lot,
+      };
+      
+      let total = 0;
+      statuses.forEach((s) => {
+        const count = deliveriesInLot.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
+        row[t(statusKeys[s] as TranslationKey)] = count > 0 ? count : "";
+        total += count;
+      });
+      
+      row[t("tableHeaderTotal")] = total;
+      return row;
+    });
+
+    const overallRow: any = {
+      [t("tableHeaderLot")]: t("tableHeaderOverallTotal"),
+    };
+    let overallGrandTotal = 0;
+    statuses.forEach((s) => {
+      const count = deliveryData.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
+      overallRow[t(statusKeys[s] as TranslationKey)] = count;
+      overallGrandTotal += count;
+    });
+    overallRow[t("tableHeaderTotal")] = overallGrandTotal;
+    
+    arrivalsOut.push(overallRow);
+
+    const wsArrivals = XLSX.utils.json_to_sheet(arrivalsOut);
+    XLSX.utils.book_append_sheet(wb, wsArrivals, t("arrivalsTab"));
+  } catch(e) {
+    console.error("Failed to append arrivals sheet", e);
+  }
+
   XLSX.writeFile(wb, "deliveries.xlsx");
   showToast(t("excelGenerated"), "success");
 });
