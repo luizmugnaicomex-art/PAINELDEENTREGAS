@@ -41,7 +41,6 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-
 let db: any = null;
 try {
   if (firebaseConfig.apiKey && typeof firebase !== "undefined") {
@@ -1663,9 +1662,8 @@ function renderCharts(data: DeliveryRow[]) {
   const pending = overallCounts[3];
   const canceled = overallCounts[4];
   
-  const resolved = delivered + canceled;
-  const efficiency = resolved > 0 ? ((delivered / resolved) * 100).toFixed(1) : "0.0";
-  const progressPct = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
+  const efficiency = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
+  const progressPct = total > 0 ? (((delivered + inTransit + waiting) / total) * 100).toFixed(1) : "0.0";
 
   // Clear previous charts wrapper
   chartsContent.innerHTML = `
@@ -1947,7 +1945,7 @@ function renderCharts(data: DeliveryRow[]) {
       const cDelivered = carrierStats[carrier][0] || 0;
       const cCanceled = carrierStats[carrier][4] || 0;
       const cResolved = cDelivered + cCanceled;
-      const cEfficiency = cResolved > 0 ? ((cDelivered / cResolved) * 100).toFixed(1) : "0.0";
+      const cEfficiency = total > 0 ? ((cDelivered / total) * 100).toFixed(1) : "0.0";
 
       carrierGrid.insertAdjacentHTML("beforeend", `
         <div class="flex flex-col items-center">
@@ -2156,10 +2154,13 @@ function renderArrivalsTable() {
               }, {} as Record<string, number>);
               const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
+              const models = Array.from(new Set(deliveriesInLot.map(d => String(d["MODEL"] || "")).filter(m => m !== ""))).join(", ");
+              const lotDisplay = models ? `${lot} - ${models}` : lot;
+
               if (total === 0) return "";
 
               return `<tr>
-                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${lot}</td>
+                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${lotDisplay}</td>
                 ${statuses.map((s) => `<td class="px-4 py-3">${statusCounts[s] > 0 ? statusCounts[s] : ""}</td>`).join("")}
                 <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${total}</td>
               </tr>`;
@@ -2381,8 +2382,11 @@ exportExcelBtn?.addEventListener("click", async () => {
 
     const arrivalsOut = lotsFromData.map((lot) => {
       const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
+      const models = Array.from(new Set(deliveriesInLot.map(d => String(d["MODEL"] || "")).filter(m => m !== ""))).join(", ");
+      const lotDisplay = models ? `${lot} - ${models}` : lot;
+
       const row: any = {
-        [t("tableHeaderLot")]: lot,
+        [t("tableHeaderLot")]: lotDisplay,
       };
       
       let total = 0;
