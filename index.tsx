@@ -1,5 +1,3 @@
-index.tsx
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -176,12 +174,17 @@ const translations = {
     deliveriesTab: "Entregas",
     arrivalsTab: "Chegadas por Lote",
     chartsTab: "Gráficos (Operação)",
+    timeTab: "Tempo de Operação",
     inventoryTab: "Estoque",
     modelsTitle: "Modelos",
     legendTitle: "Legenda",
     efic: "EFIC.",
     prog: "PROG.",
     pend: "PEND.",
+    tableHeaderStart: "Início",
+    tableHeaderEnd: "Fim",
+    tableHeaderFullTime: "Tempo Total",
+    tableHeaderTimeAvg: "Tempo Médio",
     chartsOverviewTitle: "Visão Geral da Operação",
     chartsLotProgressTitle: "Progresso por Lote",
     chartsCarrierTitle: "Desempenho por Transportadora",
@@ -287,12 +290,17 @@ const translations = {
     deliveriesTab: "Deliveries",
     arrivalsTab: "Arrivals per Lot",
     chartsTab: "Charts (Operation)",
+    timeTab: "Operation Time",
     inventoryTab: "Inventory",
     modelsTitle: "Models",
     legendTitle: "Legend",
     efic: "EFFIC.",
     prog: "PROG.",
     pend: "PEND.",
+    tableHeaderStart: "Start",
+    tableHeaderEnd: "End",
+    tableHeaderFullTime: "Total Time",
+    tableHeaderTimeAvg: "Average Time",
     chartsOverviewTitle: "Operation Overview",
     chartsLotProgressTitle: "Progress by Lot",
     chartsCarrierTitle: "Carrier Performance",
@@ -397,12 +405,17 @@ const translations = {
     deliveriesTab: "交货",
     arrivalsTab: "每批到达",
     chartsTab: "图表（运营）",
+    timeTab: "运营时间",
     inventoryTab: "库存",
     modelsTitle: "型号",
     legendTitle: "图例",
     efic: "效率",
     prog: "进度",
     pend: "待处理",
+    tableHeaderStart: "起点",
+    tableHeaderEnd: "终点",
+    tableHeaderFullTime: "总时间",
+    tableHeaderTimeAvg: "平均时间",
     chartsOverviewTitle: "运营概览",
     chartsLotProgressTitle: "按批次进度",
     chartsCarrierTitle: "承运人绩效",
@@ -455,6 +468,7 @@ let activeStatusFilter: string | null = null;
 let showOnlyBattery: boolean = false;
 let showOnlyKd: boolean = false;
 let showOnlyProject: boolean = false;
+let isMacroView: boolean = false;
 let overallChart: any = null;
 let lotChart: any = null;
 let modelChart: any = null;
@@ -697,6 +711,47 @@ function safeValue(v: any): any {
   if (v == null) return "";
   if (typeof v === "string" && isExcelErrorString(v)) return "";
   return v;
+}
+
+function toDateTimeMaybe(v: any): Date | null {
+  v = safeValue(v);
+  if (!v) return null;
+  if (v instanceof Date && !isNaN(v.getTime())) return v;
+  if (typeof v === "number" && v > 1) {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    if (!isNaN(d.getTime())) {
+      return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+    }
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+    const iso = new Date(s);
+    if (!isNaN(iso.getTime()) && /\d{4}/.test(s)) return iso;
+    // dd/mm/yyyy hh:mm or dd/mm/yyyy
+    const parts = s.split(/[\s-]/);
+    if (parts.length > 0) {
+      const dateParts = parts[0].split('/');
+      if (dateParts.length === 3) {
+        let h = 0, m = 0;
+        if (parts.length > 1) {
+          const timeParts = parts[1].split(':');
+          if (timeParts.length >= 2) {
+            h = parseInt(timeParts[0], 10);
+            m = parseInt(timeParts[1], 10);
+          }
+        }
+        let a = parseInt(dateParts[0], 10);
+        let b = parseInt(dateParts[1], 10);
+        let c = parseInt(dateParts[2], 10);
+        if (c < 100) c+=2000;
+        if (b > 12 && a <= 12) { const tmp = a; a = b; b = tmp; }
+        const dt = new Date(c, b - 1, a, h, m);
+        return isNaN(dt.getTime()) ? null : dt;
+      }
+    }
+  }
+  return null;
 }
 
 function toDateMaybe(v: any): Date | null {
@@ -1491,6 +1546,9 @@ viewModeTabs?.addEventListener("click", (e) => {
     const chartsContent = document.getElementById("charts-content");
     chartsContent?.classList.toggle("hidden", target !== "charts");
     
+    const timeContent = document.getElementById("time-content");
+    timeContent?.classList.toggle("hidden", target !== "time");
+
     const inventoryContent = document.getElementById("inventory-content");
     inventoryContent?.classList.toggle("hidden", target !== "inventory");
     
@@ -1498,6 +1556,8 @@ viewModeTabs?.addEventListener("click", (e) => {
       renderArrivalsTable();
     } else if (target === "charts") {
       renderCharts(deliveryData);
+    } else if (target === "time") {
+      renderTimeTable(deliveryData);
     } else if (target === "inventory") {
       renderInventory(deliveryData);
     }
@@ -1699,7 +1759,10 @@ function renderCharts(data: DeliveryRow[]) {
         </div>
 
         <!-- LOT PROGRESS CARD -->
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-1 xl:col-span-4 overflow-hidden">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-1 xl:col-span-4 overflow-hidden relative">
+          <button id="toggle-macro-view-btn" class="absolute top-4 right-4 text-xs font-bold bg-slate-50 text-slate-500 hover:text-blue-600 px-2 py-1 flex items-center justify-center rounded hover:bg-slate-100 transition border border-slate-200 shadow-sm z-10" title="Toggle Macro View">
+            <i class="fas fa-layer-group mr-1"></i> Macro View
+          </button>
           <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsLotProgressTitle">${t("chartsLotProgressTitle")}</h3>
           <div class="relative h-64 w-full cursor-grab active:cursor-grabbing overflow-x-auto pb-2">
              <div style="min-width: 800px; height: 100%;">
@@ -1747,6 +1810,17 @@ function renderCharts(data: DeliveryRow[]) {
     </div>
   `;
 
+  const macroBtn = document.getElementById("toggle-macro-view-btn");
+  if (macroBtn) {
+    if (isMacroView) {
+      macroBtn.classList.add("bg-blue-50", "text-blue-600");
+    }
+    macroBtn.addEventListener("click", () => {
+      isMacroView = !isMacroView;
+      renderCharts(data);
+    });
+  }
+
   const ctxOverall = document.getElementById("overallChartCanvas") as HTMLCanvasElement;
   if (ctxOverall) {
     overallChart = new Chart(ctxOverall, {
@@ -1783,13 +1857,14 @@ function renderCharts(data: DeliveryRow[]) {
   }
 
   // 2. Lot Progress (Bar)
-  const lotStats: Record<string, { total: number; done: number; carriers: Set<string>; operations: Set<string> }> = {};
+  const lotStats: Record<string, { total: number; done: number; statusCounts: number[]; carriers: Set<string>; operations: Set<string> }> = {};
   data.forEach((row) => {
     const lot = String(row["LOT"] || "N/A");
-    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, carriers: new Set(), operations: new Set() };
+    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, statusCounts: [0,0,0,0,0], carriers: new Set(), operations: new Set() };
     lotStats[lot].total++;
     const status = normalizeText(row["STATUS"] || "PENDENTE");
     if (status === "ENTREGUE") lotStats[lot].done++;
+    lotStats[lot].statusCounts[getStatusIndex(status)]++;
     const carrier = String(row["TRANSPORTATION COMPANY"] || row["CARRIER"] || "").trim().toUpperCase();
     if (carrier) lotStats[lot].carriers.add(carrier);
     let operation = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
@@ -1813,9 +1888,55 @@ function renderCharts(data: DeliveryRow[]) {
     const minW = Math.max(800, lotLabels.length * 40);
     ctxLot.parentElement!.style.minWidth = `${minW}px`;
     
-    lotChart = new Chart(ctxLot, {
-      type: "bar",
-      data: {
+    let chartData, chartOptions;
+
+    if (isMacroView) {
+      chartData = {
+        labels: lotLabels,
+        datasets: statusLabels.map((lbl, idx) => ({
+          label: lbl,
+          data: sortedLots.map(lot => lotStats[lot].statusCounts[idx]),
+          backgroundColor: Object.values(statusColors)[idx],
+        }))
+      };
+      chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, ticks: { color: "#64748b" }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "rgba(100, 116, 139, 0.1)" } }
+        },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { color: "#64748b", font: { size: 10 } } },
+          datalabels: {
+            color: '#fff',
+            anchor: 'center',
+            align: 'center',
+            font: { size: 10, weight: 'bold' },
+            formatter: (value: number) => value > 0 ? value : ''
+          },
+          tooltip: {
+            mode: 'index',
+            callbacks: {
+              afterBody: function(contexts: any[]) {
+                if (contexts.length === 0) return [];
+                const context = contexts[0];
+                const stat = lotStats[context.label];
+                let texts = [""];
+                if (stat && stat.carriers.size > 0) {
+                  texts.push(t("detailsCompany") + ": " + Array.from(stat.carriers).join(", "));
+                }
+                if (stat && stat.operations.size > 0) {
+                  texts.push(t("tableHeaderOperation") + ": " + Array.from(stat.operations).join(", "));
+                }
+                return texts;
+              }
+            }
+          }
+        }
+      };
+    } else {
+      chartData = {
         labels: lotLabels,
         datasets: [{
           label: "% " + t("delivered"),
@@ -1823,8 +1944,8 @@ function renderCharts(data: DeliveryRow[]) {
           backgroundColor: lotData.map(v => v === 100 ? "#22c55e" : "#3b82f6"),
           borderRadius: 4
         }]
-      },
-      options: {
+      };
+      chartOptions = {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
@@ -1866,7 +1987,13 @@ function renderCharts(data: DeliveryRow[]) {
             }
           }
         }
-      }
+      };
+    }
+
+    lotChart = new Chart(ctxLot, {
+      type: "bar",
+      data: chartData as any,
+      options: chartOptions as any
     });
   }
 
@@ -2180,6 +2307,103 @@ function renderArrivalsTable() {
     </div>
   `;
   arrivalsContent.innerHTML = tableHtml;
+}
+
+function renderTimeTable(data: DeliveryRow[]) {
+  const timeContent = document.getElementById("time-content");
+  if (!timeContent) return;
+
+  let totalTimeSum = 0;
+  let validRecords = 0;
+
+  const rowsHtml = data.map((row, idx) => {
+    const container = String(row["CONTAINER"] || "-");
+    const bl = String(row["BL"] || "-");
+    const carrier = String(row["TRANSPORTATION COMPANY"] || "-");
+    const lot = String(row["LOT"] || "-");
+
+    const startDt = toDateTimeMaybe(row["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]);
+    let endDt = toDateTimeMaybe(row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]);
+    if (!endDt) endDt = toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA NA BYD "]); // fallback
+
+    let fullTimeString = "-";
+    let durationHours = 0;
+
+    let startDisplay = startDt ? formatDate(row["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]) + " " + formatTime(startDt) : "-";
+    let endDisplay = endDt ? (row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"] ? formatDate(row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]) : formatDate(row["DATA E HORARIO DE DESCARGA NA BYD "])) + " " + formatTime(endDt) : "-";
+
+    if (startDt && endDt) {
+      const diffMs = endDt.getTime() - startDt.getTime();
+      if (diffMs > 0) {
+        durationHours = diffMs / (1000 * 60 * 60);
+        const dDays = Math.floor(durationHours / 24);
+        const dHours = Math.floor(durationHours % 24);
+        const dMins = Math.round((durationHours - Math.floor(durationHours)) * 60);
+        if (dDays > 0) fullTimeString = `${dDays}d ${dHours}h ${dMins}m`;
+        else fullTimeString = `${dHours}h ${dMins}m`;
+
+        totalTimeSum += durationHours;
+        validRecords++;
+      }
+    }
+
+    return `
+      <tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+        <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">${container}</td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300 font-mono">${bl}</td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${carrier}</td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${lot}</td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${startDisplay}</td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${endDisplay}</td>
+        <td class="px-4 py-3 font-bold text-blue-600 dark:text-blue-400">${fullTimeString}</td>
+      </tr>
+    `;
+  }).join("");
+
+  let avgTimeStr = "-";
+  if (validRecords > 0) {
+    const avgH = totalTimeSum / validRecords;
+    const aDays = Math.floor(avgH / 24);
+    const aHours = Math.floor(avgH % 24);
+    const aMins = Math.round((avgH - Math.floor(avgH)) * 60);
+    if (aDays > 0) avgTimeStr = `${aDays}d ${aHours}h ${aMins}m`;
+    else avgTimeStr = `${aHours}h ${aMins}m`;
+  }
+
+  const tableHtml = `
+    <div class="mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:flex-row justify-between items-center">
+       <div>
+         <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-1" data-i18n="timeTab">${t("timeTab")}</h3>
+         <p class="text-xs text-slate-500 dark:text-slate-400">Total registers with valid time: <strong class="text-slate-700 dark:text-slate-200">${validRecords}</strong></p>
+       </div>
+       <div class="mt-4 md:mt-0 flex items-center bg-blue-50 dark:bg-blue-900/30 px-6 py-3 rounded-lg border border-blue-100 dark:border-blue-800">
+         <i class="fas fa-clock text-blue-500 text-xl mr-3"></i>
+         <div class="flex flex-col">
+           <span class="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider" data-i18n="tableHeaderTimeAvg">${t("tableHeaderTimeAvg")}</span>
+           <span class="text-xl font-black text-blue-700 dark:text-blue-300">${avgTimeStr}</span>
+         </div>
+       </div>
+    </div>
+    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-h-[600px]">
+      <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300">
+        <thead class="bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
+          <tr>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Container</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">B/L</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderCompany">${t("tableHeaderCompany")}</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderLot">${t("tableHeaderLot")}</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderStart">${t("tableHeaderStart")}</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderEnd">${t("tableHeaderEnd")}</th>
+            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderFullTime">${t("tableHeaderFullTime")}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+  `;
+  timeContent.innerHTML = tableHtml;
 }
 
 function buildHeaderIndex(headers: any[]): Record<string, number> {
