@@ -196,6 +196,8 @@ const translations = {
     newsPostNew: "Publicar Nova Atualização",
     newsPublish: "Publicar História",
     newsModalTitle: "Nova Atualização Editorial",
+    newsPostPhoto: "Capa do Post (Foto)",
+    newsClickToPhoto: "CLIQUE PARA ADICIONAR FOTO",
     modelsTitle: "Modelos",
     legendTitle: "Legenda",
     efic: "EFIC.",
@@ -333,6 +335,8 @@ const translations = {
     newsPostNew: "Post New Update",
     newsPublish: "Publish Story",
     newsModalTitle: "Post New Editorial Update",
+    newsPostPhoto: "Post Cover (Photo)",
+    newsClickToPhoto: "CLICK TO ADD PHOTO",
     modelsTitle: "Models",
     legendTitle: "Legend",
     efic: "EFFIC.",
@@ -469,6 +473,8 @@ const translations = {
     newsPostNew: "发布新动态",
     newsPublish: "发布故事",
     newsModalTitle: "发布新编辑更新",
+    newsPostPhoto: "文章封面 (照片)",
+    newsClickToPhoto: "点击添加照片",
     modelsTitle: "型号",
     legendTitle: "图例",
     efic: "效率",
@@ -2135,15 +2141,16 @@ function renderNewsTab(data: DeliveryRow[]) {
             <div class="flex flex-col gap-4 mt-4">
               <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 dark:border-slate-700 pb-2">${t("newsOlder")}</h4>
               ${remainingPosts.map(post => `
-                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl flex gap-4 items-center shadow-sm border border-slate-100 dark:border-slate-700 group">
-                  <div class="w-16 h-16 rounded overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-slate-700">
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl flex gap-4 items-center shadow-sm border border-slate-100 dark:border-slate-700 group hover:shadow-md transition-shadow">
+                  <div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-slate-700">
                     ${post.image ? `<img src="${post.image}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center"><i class="fas fa-image text-slate-300"></i></div>`}
                   </div>
                   <div class="min-w-0 flex-grow">
                     <h5 class="font-bold text-slate-800 dark:text-slate-100 text-sm line-clamp-1">${post.title}</h5>
                     <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${post.text}</p>
+                    <div class="text-[9px] text-slate-400 font-bold uppercase mt-1">${post.author || 'Supervisão'}</div>
                   </div>
-                  <div class="text-[10px] text-slate-300 font-bold ml-auto">${post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : ''}</div>
+                  <div class="text-[10px] text-slate-300 font-bold ml-auto">${post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : (post.createdAt instanceof Date ? post.createdAt.toLocaleDateString() : '')}</div>
                   <button class="delete-post-btn text-slate-300 hover:text-red-500 transition-colors ml-2" data-id="${post.id}"><i class="fas fa-times"></i></button>
                 </div>
               `).join("")}
@@ -2239,6 +2246,17 @@ function renderNewsTab(data: DeliveryRow[]) {
                </div>
             </div>
             <div>
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">${t("newsPostPhoto")}</label>
+              <label class="w-full h-40 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-all overflow-hidden relative">
+                 <div id="image-preview-area" class="text-center">
+                    <i class="fas fa-camera text-3xl text-slate-300 mb-2"></i>
+                    <p class="text-[10px] font-bold text-slate-400">${t("newsClickToPhoto")}</p>
+                 </div>
+                 <img id="post-image-preview" class="hidden absolute inset-0 w-full h-full object-cover">
+                 <input type="file" id="post-image-input" class="hidden" accept="image/*">
+              </label>
+            </div>
+            <div>
               <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Conteúdo</label>
               <textarea id="post-text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none resize-none min-h-[200px]"></textarea>
             </div>
@@ -2254,10 +2272,48 @@ function renderNewsTab(data: DeliveryRow[]) {
 
   // Attach dynamic event triggers inside structural template literals
   const modal = document.getElementById("blog-modal");
+  const imgInput = document.getElementById("post-image-input") as HTMLInputElement;
+  const imgPreview = document.getElementById("post-image-preview") as HTMLImageElement;
+  const previewArea = document.getElementById("image-preview-area");
+  let currentPostImage: string | undefined = undefined;
+
+  const hideModal = () => {
+    modal?.classList.add("hidden");
+    currentPostImage = undefined;
+    if(imgPreview) imgPreview.classList.add("hidden");
+    if(previewArea) previewArea.classList.remove("hidden");
+    if(imgInput) imgInput.value = "";
+  };
+
   document.getElementById("add-news-btn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
   document.getElementById("sidebar-add-btn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
-  document.getElementById("close-blog-modal")?.addEventListener("click", () => modal?.classList.add("hidden"));
-  document.getElementById("cancel-post-btn")?.addEventListener("click", () => modal?.classList.add("hidden"));
+  document.getElementById("close-blog-modal")?.addEventListener("click", hideModal);
+  document.getElementById("cancel-post-btn")?.addEventListener("click", hideModal);
+
+  imgInput?.addEventListener("change", (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        const img = new Image();
+        img.src = re.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 1000;
+          let width = img.width;
+          let height = img.height;
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          currentPostImage = canvas.toDataURL("image/jpeg", 0.7);
+          if(imgPreview) { imgPreview.src = currentPostImage; imgPreview.classList.remove("hidden"); }
+          if(previewArea) previewArea.classList.add("hidden");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  });
 
   document.getElementById("save-post-btn")?.addEventListener("click", async () => {
     const title = (document.getElementById("post-title") as HTMLInputElement).value;
@@ -2267,9 +2323,17 @@ function renderNewsTab(data: DeliveryRow[]) {
 
     if (!title || !text) return showToast("Por favor, preencha o título e o conteúdo.", "warning");
 
-    blogPosts.unshift({ id: Date.now().toString(), title, text, category, author, createdAt: new Date() });
+    blogPosts.unshift({ 
+      id: Date.now().toString(), 
+      title, 
+      text, 
+      category, 
+      author, 
+      image: currentPostImage,
+      createdAt: new Date() 
+    });
     showToast("Notícia publicada com sucesso!", "success");
-    modal?.classList.add("hidden");
+    hideModal();
     await saveStateToFirebase();
     renderNewsTab(deliveryData);
   });
