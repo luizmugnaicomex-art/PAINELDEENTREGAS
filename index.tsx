@@ -1707,18 +1707,20 @@ function renderCharts(data: DeliveryRow[]) {
     "ENTREGUE": "#22c55e",
     "A CAMINHO": "#3b82f6",
     "AGUARDANDO DESOVA": "#eab308",
+    "BACKLOG": "#f97316",
     "PENDENTE": "#64748b",
     "OUTROS": "#ef4444"
   };
 
-  const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), t("pending"), t("chartsOther")];
+  const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), "Backlog", t("pending"), t("chartsOther")];
   
   function getStatusIndex(s: string) {
     if (s === "ENTREGUE") return 0;
     if (s === "A CAMINHO") return 1;
     if (s === "AGUARDANDO DESOVA") return 2;
-    if (s === "PENDENTE") return 3;
-    return 4;
+    if (s === "BACKLOG") return 3;
+    if (s === "PENDENTE") return 4;
+    return 5;
   }
 
   const customLegendHTML = `
@@ -1736,7 +1738,7 @@ function renderCharts(data: DeliveryRow[]) {
   `;
 
   // 1. Overall Chart (Doughnut)
-  let overallCounts = [0, 0, 0, 0, 0];
+  let overallCounts = [0, 0, 0, 0, 0, 0];
   data.forEach((row) => {
     let s = normalizeText(row["STATUS"] || "PENDENTE");
     overallCounts[getStatusIndex(s)]++;
@@ -1746,11 +1748,12 @@ function renderCharts(data: DeliveryRow[]) {
   const delivered = overallCounts[0];
   const inTransit = overallCounts[1];
   const waiting = overallCounts[2];
-  const pending = overallCounts[3];
-  const canceled = overallCounts[4];
+  const backlogStat = overallCounts[3];
+  const pending = overallCounts[4];
+  const others = overallCounts[5];
   
   const efficiency = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
-  const progressPct = total > 0 ? (((delivered + inTransit + waiting) / total) * 100).toFixed(1) : "0.0";
+  const progressPct = total > 0 ? (((delivered + inTransit + waiting + backlogStat) / total) * 100).toFixed(1) : "0.0";
 
   // Clear previous charts wrapper
   chartsContent.innerHTML = `
@@ -1885,7 +1888,7 @@ function renderCharts(data: DeliveryRow[]) {
   const lotStats: Record<string, { total: number; done: number; statusCounts: number[]; carriers: Set<string>; operations: Set<string> }> = {};
   data.forEach((row) => {
     const lot = String(row["LOT"] || "N/A");
-    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, statusCounts: [0,0,0,0,0], carriers: new Set(), operations: new Set() };
+    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, statusCounts: [0,0,0,0,0,0], carriers: new Set(), operations: new Set() };
     lotStats[lot].total++;
     const status = normalizeText(row["STATUS"] || "PENDENTE");
     if (status === "ENTREGUE") lotStats[lot].done++;
@@ -2086,7 +2089,7 @@ function renderCharts(data: DeliveryRow[]) {
   const carrierStats: Record<string, number[]> = {};
   data.forEach((row) => {
     const carrier = String(row["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase() || "N/A";
-    if (!carrierStats[carrier]) carrierStats[carrier] = [0, 0, 0, 0, 0];
+    if (!carrierStats[carrier]) carrierStats[carrier] = [0, 0, 0, 0, 0, 0];
     let s = normalizeText(row["STATUS"] || "PENDENTE");
     carrierStats[carrier][getStatusIndex(s)]++;
   });
@@ -2097,8 +2100,7 @@ function renderCharts(data: DeliveryRow[]) {
       const containerId = `carrier-chart-${idx}`;
       const total = carrierStats[carrier].reduce((a, b) => a + b, 0);
       const cDelivered = carrierStats[carrier][0] || 0;
-      const cCanceled = carrierStats[carrier][4] || 0;
-      const cResolved = cDelivered + cCanceled;
+      const cOthers = carrierStats[carrier][5] || 0;
       const cEfficiency = total > 0 ? ((cDelivered / total) * 100).toFixed(1) : "0.0";
 
       carrierGrid.insertAdjacentHTML("beforeend", `
@@ -2170,7 +2172,7 @@ function renderCharts(data: DeliveryRow[]) {
   const warehouseStats: Record<string, number[]> = {};
   data.forEach((row) => {
     const wh = String(row["BONDED WAREHOUSE"] || "N/A").trim().toUpperCase() || "N/A";
-    if (!warehouseStats[wh]) warehouseStats[wh] = [0, 0, 0, 0, 0];
+    if (!warehouseStats[wh]) warehouseStats[wh] = [0, 0, 0, 0, 0, 0];
     let s = normalizeText(row["STATUS"] || "PENDENTE");
     warehouseStats[wh][getStatusIndex(s)]++;
   });
@@ -2832,7 +2834,60 @@ exportExcelBtn?.addEventListener("click", async () => {
     console.error("Failed to append arrivals sheet", e);
   }
 
-  XLSX.writeFile(wb, "deliveries.xlsx");
+  // Add Inventory Sheet if data exists
+  try {
+    const inventoryData = (window as any).inventoryExportData;
+    if (inventoryData && inventoryData.sections) {
+      const inventoryRows: any[] = [];
+      
+      // Headers for Inventory
+      inventoryRows.push([
+        "CATEGORY", 
+        "LOCATION", 
+        "EMPTY", 
+        "FULL", 
+        "TOTAL", 
+        "CAPACITY", 
+        "UTILIZATION (%)"
+      ]);
+
+      inventoryData.sections.forEach((sec: any) => {
+        sec.locations.forEach((loc: any) => {
+          const total = (loc.empty || 0) + (loc.full || 0);
+          const utilization = loc.capacity > 0 ? ((total / loc.capacity) * 100).toFixed(1) + "%" : "0%";
+          
+          inventoryRows.push([
+            sec.title,
+            loc.name,
+            loc.empty,
+            loc.full,
+            total,
+            loc.capacity,
+            utilization
+          ]);
+        });
+      });
+
+      // Add Aging info as well
+      inventoryRows.push([]);
+      inventoryRows.push(["INVENTORY AGING SUMMARY"]);
+      inventoryRows.push(["1-7 Days", inventoryData.aging['1-7d'] || "0"]);
+      inventoryRows.push(["8-15 Days", inventoryData.aging['8-15d'] || "0"]);
+      inventoryRows.push(["16-30 Days", inventoryData.aging['16-30d'] || "0"]);
+      inventoryRows.push(["30+ Days", inventoryData.aging['30d+'] || "0"]);
+      
+      inventoryRows.push([]);
+      inventoryRows.push(["BUFFER METRICS"]);
+      inventoryRows.push(["Avg. Stay Time (Days)", inventoryData.avgStay || "0.0"]);
+
+      const wsInventory = XLSX.utils.aoa_to_sheet(inventoryRows);
+      XLSX.utils.book_append_sheet(wb, wsInventory, t("inventoryTab") || "Inventory");
+    }
+  } catch (e) {
+    console.error("Failed to append inventory sheet", e);
+  }
+
+  XLSX.writeFile(wb, `Entregas_${new Date().toISOString().split("T")[0]}.xlsx`);
   showToast(t("excelGenerated"), "success");
 });
 
