@@ -10,6 +10,8 @@
  * - Keeps stable row id (_id) so status updates won’t break after filtering/sorting
  * - Expanded Details panel with the extra columns present in your sheet
  * - Adds Daily Goal (150 on weekdays; weekends show goal as “bonus”) per date card
+ * - Fixed: Integrated Inventory and Operational Blog storage with online persistence (Firebase)
+ * - Standardized BYD Corporate Minutes formatting layout for operational logs and reports
  */
 
 import { mountStorageInventory } from './StorageInventory';
@@ -91,8 +93,8 @@ const languageSwitcher = document.getElementById("language-switcher") as HTMLDiv
 /* ------------------------------- i18n ------------------------------------ */
 const translations = {
   "pt-BR": {
-    pageTitle: "Painel de Entregas de Contêineres",
-    headerTitle: "Painel de Entregas",
+    pageTitle: "KD Monitor Dashboard",
+    headerTitle: "KD Monitor Dashboard",
     uploadPrompt: "Carregue sua planilha de agendamento para começar",
     searchInputPlaceholder: "Pesquisar container, BL, navio...",
     searchLotPlaceholder: "Pesquisar LOTE",
@@ -177,6 +179,23 @@ const translations = {
     chartsTab: "Gráficos (Operação)",
     timeTab: "Tempo de Operação",
     inventoryTab: "Estoque",
+    newsTab: "Diário de Operação",
+    newsBreaking: "ÚLTIMAS",
+    newsNewUpdate: "Nova Atualização",
+    newsNoPosts: "Nenhuma notícia postada ainda.",
+    newsWaiting: "Aguardando atualizações da operação...",
+    newsOlder: "Atualizações Anteriores",
+    newsStayConnected: "Fique Conectado",
+    newsEffTitle: "Eficiência Operacional",
+    newsTransitTitle: "Trânsito Ativo",
+    newsBacklogTitle: "Carga em Backlog",
+    newsLotJust: "Justificativas por Lote",
+    newsAddInfo: "Informações Adicionais",
+    newsSaveNotes: "Salvar Notas",
+    newsSaveAlerts: "Salvar Avisos",
+    newsPostNew: "Publicar Nova Atualização",
+    newsPublish: "Publicar História",
+    newsModalTitle: "Nova Atualização Editorial",
     modelsTitle: "Modelos",
     legendTitle: "Legenda",
     efic: "EFIC.",
@@ -208,10 +227,11 @@ const translations = {
     reachedGoal: "Meta atingida",
     notReachedGoal: "Abaixo da meta",
     kpiGoal: (del: number, goal: number) => `${del}/${goal}`,
+    today: "Hoje"
   },
   "en-US": {
-    pageTitle: "Container Delivery Dashboard",
-    headerTitle: "Delivery Dashboard",
+    pageTitle: "KD Monitor Dashboard",
+    headerTitle: "KD Monitor Dashboard",
     uploadPrompt: "Upload your schedule spreadsheet to begin",
     searchInputPlaceholder: "Search container, BL, vessel...",
     searchLotPlaceholder: "Search LOT",
@@ -296,6 +316,23 @@ const translations = {
     chartsTab: "Charts (Operation)",
     timeTab: "Operation Time",
     inventoryTab: "Inventory",
+    newsTab: "Operation Blog",
+    newsBreaking: "BREAKING",
+    newsNewUpdate: "New Update",
+    newsNoPosts: "No news posted yet.",
+    newsWaiting: "Waiting for operation updates...",
+    newsOlder: "Older Updates",
+    newsStayConnected: "Stay Connected",
+    newsEffTitle: "Operation Efficiency",
+    newsTransitTitle: "Active Transit",
+    newsBacklogTitle: "Backlog Load",
+    newsLotJust: "Lot Justifications",
+    newsAddInfo: "Additional Information",
+    newsSaveNotes: "Save Notes",
+    newsSaveAlerts: "Save Notices",
+    newsPostNew: "Post New Update",
+    newsPublish: "Publish Story",
+    newsModalTitle: "Post New Editorial Update",
     modelsTitle: "Models",
     legendTitle: "Legend",
     efic: "EFFIC.",
@@ -326,10 +363,11 @@ const translations = {
     reachedGoal: "Goal reached",
     notReachedGoal: "Below goal",
     kpiGoal: (del: number, goal: number) => `${del}/${goal}`,
+    today: "Today"
   },
   "zh-CN": {
-    pageTitle: "集装箱交付仪表板",
-    headerTitle: "交付仪表板",
+    pageTitle: "KD 监控仪表板",
+    headerTitle: "KD 监控仪表板",
     uploadPrompt: "上传您的排程电子表格以开始",
     searchInputPlaceholder: "搜索集装箱、提单 (BL)、船名...",
     searchLotPlaceholder: "搜索批号 (LOT)",
@@ -414,6 +452,23 @@ const translations = {
     chartsTab: "图表（运营）",
     timeTab: "运营时间",
     inventoryTab: "库存",
+    newsTab: "运营日志",
+    newsBreaking: "快讯",
+    newsNewUpdate: "新增更新",
+    newsNoPosts: "尚无发布消息。",
+    newsWaiting: "正在等待运营更新...",
+    newsOlder: "历史更新",
+    newsStayConnected: "保持关注",
+    newsEffTitle: "运营效率",
+    newsTransitTitle: "在途运输",
+    newsBacklogTitle: "积压负荷",
+    newsLotJust: "各批次说明",
+    newsAddInfo: "附加信息",
+    newsSaveNotes: "保存笔记",
+    newsSaveAlerts: "保存通知",
+    newsPostNew: "发布新动态",
+    newsPublish: "发布故事",
+    newsModalTitle: "发布新编辑更新",
     modelsTitle: "型号",
     legendTitle: "图例",
     efic: "效率",
@@ -444,6 +499,7 @@ const translations = {
     reachedGoal: "已达目标",
     notReachedGoal: "未达目标",
     kpiGoal: (del: number, goal: number) => `${del}/${goal}`,
+    today: "今天"
   },
 };
 
@@ -473,6 +529,9 @@ type DeliveryRow = Record<string, any> & {
 };
 
 let deliveryData: DeliveryRow[] = [];
+let blogPosts: BlogPost[] = [];
+let lotJustifications: Record<string, string> = {};
+let generalNotes: string = "";
 let searchDebounceTimer: number;
 let activeStatusFilter: string | null = null;
 let showOnlyBattery: boolean = false;
@@ -636,11 +695,24 @@ logoUpload?.addEventListener("change", handleLogoUpload);
 /* --------------------------- FIREBASE INTEGRATION -------------------------- */
 let isUpdatingFromFirebase = false;
 
+export type BlogPost = {
+  id: string;
+  title: string;
+  text: string;
+  image?: string;
+  category: string;
+  author: string;
+  createdAt: any;
+};
+
 type FirebaseState = {
   deliveryData?: DeliveryRow[];
   lastUpdate?: any; // Firestore Timestamp
   lastUpdateSheetName?: string;
   companyLogo?: string;
+  blogPosts?: BlogPost[];
+  lotJustifications?: Record<string, string>;
+  generalNotes?: string;
 };
 
 const FIREBASE_COLLECTION = "delivery_dashboard";
@@ -652,6 +724,9 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
   try {
     const stateToSave: FirebaseState = {
       deliveryData,
+      blogPosts,
+      lotJustifications,
+      generalNotes,
       lastUpdate: new Date(),
       lastUpdateSheetName: lastUpdate?.dataset?.sheetName || "",
       companyLogo: localStorage.getItem("companyLogo") || "",
@@ -674,6 +749,9 @@ function listenForRealtimeUpdates() {
         if (docSnap.exists) {
           const data: FirebaseState = docSnap.data() || {};
           deliveryData = Array.isArray(data.deliveryData) ? data.deliveryData : [];
+          blogPosts = Array.isArray(data.blogPosts) ? data.blogPosts : [];
+          lotJustifications = data.lotJustifications || {};
+          generalNotes = data.generalNotes || "";
           activeStatusFilter = null;
           if (searchInput) searchInput.value = "";
 
@@ -771,11 +849,8 @@ function toDateMaybe(v: any): Date | null {
   // XLSX may return Date objects
   if (v instanceof Date && !isNaN(v.getTime())) return v;
 
-  // Excel time can come as Date with 1899/1900 base; still Date object -> ok
   // Serial number
   if (typeof v === "number" && v > 1) {
-    // Excel serial dates are days since 1900-01-01.
-    // 25569 is the offset between 1900-01-01 and 1970-01-01.
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     if (!isNaN(d.getTime())) return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
   }
@@ -785,7 +860,6 @@ function toDateMaybe(v: any): Date | null {
     const s = v.trim();
     if (!s) return null;
 
-    // if ISO-ish
     const iso = new Date(s);
     if (!isNaN(iso.getTime()) && /\d{4}/.test(s)) return iso;
 
@@ -796,15 +870,12 @@ function toDateMaybe(v: any): Date | null {
       let c = parseInt(parts[2], 10);
       if ([a, b, c].some((n) => isNaN(n))) return null;
 
-      // detect yyyy-mm-dd
       if (c < 1000 && a > 1000) {
         const dt = new Date(a, b - 1, c);
         return isNaN(dt.getTime()) ? null : dt;
       }
 
-      // dd/mm/yy
       if (c < 100) c += 2000;
-      // if month > 12 swap
       if (b > 12 && a <= 12) {
         const tmp = a;
         a = b;
@@ -830,7 +901,6 @@ function formatTime(v: any): string {
   if (v instanceof Date && !isNaN(v.getTime())) {
     return v.toLocaleTimeString(currentLanguage, { hour: "2-digit", minute: "2-digit" });
   }
-  // XLSX may provide time as "08:00" or number (fraction of day)
   if (typeof v === "number") {
     const totalMinutes = Math.round(v * 24 * 60);
     const hh = Math.floor(totalMinutes / 60) % 24;
@@ -844,22 +914,8 @@ function formatTime(v: any): string {
 
 function findDeliverySheet(workbook: any): string {
   const keywords = [
-    "DELIVERY",
-    "SCHEDULE",
-    "MONDAY",
-    "TUESDAY",
-    "WEDNESDAY",
-    "THURSDAY",
-    "FRIDAY",
-    "SATURDAY",
-    "SUNDAY",
-    "SEGUNDA",
-    "TERCA",
-    "QUARTA",
-    "QUINTA",
-    "SEXTA",
-    "SABADO",
-    "DOMINGO",
+    "DELIVERY", "SCHEDULE", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
+    "SEGUNDA", "TERCA", "QUARTA", "QUINTA", "SEXTA", "SABADO", "DOMINGO",
   ];
   return (
     workbook.SheetNames.find((name: string) => {
@@ -900,7 +956,7 @@ function getStatusPill(status: string): string {
 }
 
 function isWeekend(d: Date): boolean {
-  const day = d.getDay(); // 0 sun ... 6 sat
+  const day = d.getDay();
   return day === 0 || day === 6;
 }
 
@@ -977,9 +1033,9 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   }
 
   renderDeliveryDashboard(filteredData, activeTabId);
-  renderArrivalsTable(); // Keep Arrivals in sync
+  renderArrivalsTable();
   renderCharts(filteredData);
-  renderInventory(filteredData); // Keep Inventory in sync
+  renderInventory(filteredData);
   updateStats();
 }
 
@@ -1208,47 +1264,6 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
       if (normalizeText(d["STATUS"] || "") === "ENTREGUE") carrierStats[carrier].delivered++;
     });
 
-    const carrierBreakdownHTML = Object.entries(carrierStats)
-      .sort((a, b) => b[1].total - a[1].total)
-      .map(([carrier, stats]) => {
-        const carrierPercent = stats.total > 0 ? (stats.delivered / stats.total) * 100 : 0;
-        return `<button type="button" class="carrier-card-btn text-left bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-all hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-md cursor-pointer w-full" data-carrier="${carrier}">
-          <div class="flex justify-between items-start mb-2">
-            <span class="font-bold text-sm text-slate-700 dark:text-slate-200 truncate pr-2" title="${carrier}">${carrier}</span>
-            <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">${carrierPercent.toFixed(0)}%</span>
-          </div>
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs text-slate-500 dark:text-slate-400">${t("totalContainers")}: <strong class="text-slate-700 dark:text-slate-200">${stats.total}</strong></span>
-            <span class="text-xs text-slate-500 dark:text-slate-400">${t("delivered")}: <strong class="text-green-600 dark:text-green-400">${stats.delivered}</strong></span>
-          </div>
-          <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-            <div class="bg-blue-500 h-full transition-all duration-700" style="width: ${carrierPercent}%"></div>
-          </div>
-        </button>`;
-      })
-      .join("");
-
-    // Add click handlers for carrier cards
-    setTimeout(() => {
-      card.querySelectorAll(".carrier-card-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const detailsContainers = btn.querySelectorAll(".lot-details");
-          detailsContainers.forEach((d) => d.classList.toggle("hidden"));
-        });
-      });
-      card.querySelectorAll(".carrier-name-filter").forEach((span) => {
-        span.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const carrier = (span as HTMLElement).dataset.carrier;
-          const searchInput = document.getElementById("search-input") as HTMLInputElement;
-          if (searchInput) {
-            searchInput.value = carrier || "";
-            applyFiltersAndRender();
-          }
-        });
-      });
-    }, 0);
-
     const goalBadge =
       hasRealDate && cardGoal > 0
         ? `<span class="ml-3 inline-flex items-center px-2 py-1 rounded text-[11px] font-bold ${
@@ -1401,6 +1416,24 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
     `;
 
     deliveryContent?.appendChild(card);
+    
+    // Wire dynamic collapse / search events inside tab card mapping
+    card.querySelectorAll(".carrier-card-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const detailsContainers = btn.querySelectorAll(".lot-details");
+        detailsContainers.forEach((d) => d.classList.toggle("hidden"));
+      });
+    });
+    card.querySelectorAll(".carrier-name-filter").forEach((span) => {
+      span.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const carrier = (span as HTMLElement).dataset.carrier;
+        if (searchInput) {
+          searchInput.value = carrier || "";
+          applyFiltersAndRender();
+        }
+      });
+    });
   });
 }
 
@@ -1445,7 +1478,7 @@ function handleRowInteraction(rowEl: HTMLTableRowElement) {
   const plates = [plate1, plate2].filter(Boolean).join(" / ");
 
   details.innerHTML = `
-    <td colspan="8" class="details-cell">
+    <td colspan="10" class="details-cell">
       <div class="details-content-wrapper bg-slate-50 dark:bg-slate-900/50">
         <div class="flex items-center justify-between mb-4">
           <h4 class="text-sm font-extrabold text-slate-700 dark:text-slate-200 flex items-center">
@@ -1494,7 +1527,7 @@ function handleRowInteraction(rowEl: HTMLTableRowElement) {
 
           <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${t("detailsNotes")}</label>
-            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100 italic">${String(rowData["NOTES"] || rowData["Conversamos amanhã sobre a referência"] || "-")}</p>
+            <p class="text-sm font-medium mt-1 text-slate-800 dark:text-slate-100 italic">${String(rowData["NOTES"] || "-")}</p>
           </div>
         </div>
       </div>
@@ -1520,9 +1553,7 @@ function sanitizeStatus(raw: any): string {
   if (s === "BACKLOG") return "BACKLOG";
   if (s === "CANCELED" || s === "CANCELLED") return "CANCELADO";
   if (s === "AWAITING UNLOAD") return "AGUARDANDO DESOVA";
-  // if user sheet has garbage like #REF!
   if (isExcelErrorString(raw)) return "PENDENTE";
-  // keep only our options if unknown
   if (!["PENDENTE", "A CAMINHO", "ADIADO", "ENTREGUE", "CANCELADO", "AGUARDANDO DESOVA", "BACKLOG"].includes(s)) return "PENDENTE";
   return s;
 }
@@ -1544,7 +1575,7 @@ deliveryContent?.addEventListener("change", async (e) => {
   if (await showConfirmationDialog(t("confirmStatusChangeTitle"), t("confirmStatusChangeMessage", String(label), next))) {
     row["STATUS"] = next;
     showToast(t("statusUpdated", String(label), next), "success");
-    saveStateToFirebase();
+    await saveStateToFirebase();
     applyFiltersAndRender();
   } else {
     select.value = prev;
@@ -1576,6 +1607,9 @@ viewModeTabs?.addEventListener("click", (e) => {
 
     const inventoryContent = document.getElementById("inventory-content");
     inventoryContent?.classList.toggle("hidden", target !== "inventory");
+
+    const newsContent = document.getElementById("news-content");
+    newsContent?.classList.toggle("hidden", target !== "news");
     
     if (target === "arrivals") {
       renderArrivalsTable();
@@ -1585,6 +1619,8 @@ viewModeTabs?.addEventListener("click", (e) => {
       renderTimeTable(deliveryData);
     } else if (target === "inventory") {
       renderInventory(deliveryData);
+    } else if (target === "news") {
+      renderNewsTab(deliveryData);
     }
   }
 });
@@ -1655,31 +1691,17 @@ summaryStats?.addEventListener("click", (e) => {
   }
 });
 
+/* --------------------------------- CHARTS ---------------------------------- */
 function renderCharts(data: DeliveryRow[]) {
   const chartsContent = document.getElementById("charts-content");
   if (!chartsContent) return;
 
-  // Destroy previous charts if any
-  if (overallChart) {
-    overallChart.destroy();
-    overallChart = null;
-  }
-  if (lotChart) {
-    lotChart.destroy();
-    lotChart = null;
-  }
-  if (modelChart) {
-    modelChart.destroy();
-    modelChart = null;
-  }
+  if (overallChart) { overallChart.destroy(); overallChart = null; }
+  if (lotChart) { lotChart.destroy(); lotChart = null; }
+  if (modelChart) { modelChart.destroy(); modelChart = null; }
+  carrierCharts.forEach(c => c.destroy()); carrierCharts = [];
+  warehouseCharts.forEach(c => c.destroy()); warehouseCharts = [];
 
-  // Destroy previous dynamic charts
-  carrierCharts.forEach(c => c.destroy());
-  carrierCharts = [];
-  warehouseCharts.forEach(c => c.destroy());
-  warehouseCharts = [];
-
-  // Register ChartDataLabels plugin if not already registered globally
   if (typeof ChartDataLabels !== "undefined") {
     Chart.register(ChartDataLabels);
     Chart.defaults.set('plugins.datalabels', {
@@ -1689,11 +1711,8 @@ function renderCharts(data: DeliveryRow[]) {
         if (value === 0) return '';
         let sum = 0;
         let dataArr = ctx.chart.data.datasets[0].data;
-        dataArr.map((data: number) => {
-            sum += data;
-        });
-        let percentage = sum > 0 ? (value * 100 / sum).toFixed(1) + "%" : "0%";
-        return percentage;
+        dataArr.map((data: number) => { sum += data; });
+        return sum > 0 ? (value * 100 / sum).toFixed(1) + "%" : "0%";
       }
     });
   }
@@ -1737,7 +1756,6 @@ function renderCharts(data: DeliveryRow[]) {
     </div>
   `;
 
-  // 1. Overall Chart (Doughnut)
   let overallCounts = [0, 0, 0, 0, 0, 0];
   data.forEach((row) => {
     let s = normalizeText(row["STATUS"] || "PENDENTE");
@@ -1750,19 +1768,14 @@ function renderCharts(data: DeliveryRow[]) {
   const waiting = overallCounts[2];
   const backlogStat = overallCounts[3];
   const pending = overallCounts[4];
-  const others = overallCounts[5];
   
   const efficiency = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
   const progressPct = total > 0 ? (((delivered + inTransit + waiting + backlogStat) / total) * 100).toFixed(1) : "0.0";
 
-  // Clear previous charts wrapper
   chartsContent.innerHTML = `
     <div class="space-y-6 pb-8">
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-6 p-4">
-        
-        <!-- OP OVERVIEW CARD -->
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:col-span-1 xl:col-span-1">
-          <!-- KPIs topbar -->
           <div class="flex gap-2 border-b border-slate-100 pb-2 mb-2 justify-around">
             <div class="bg-slate-50 dark:bg-slate-900 rounded p-1 text-center shadow-sm flex-1">
               <div class="text-[#0f172a] dark:text-slate-100 text-base font-black">${efficiency}%</div>
@@ -1777,7 +1790,6 @@ function renderCharts(data: DeliveryRow[]) {
               <div class="text-[9px] font-bold text-slate-400" data-i18n="pend">${t("pend")}</div>
             </div>
           </div>
-
           <div class="flex-grow min-w-0">
             <h3 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 text-center" data-i18n="chartsOverviewTitle">${t("chartsOverviewTitle")}</h3>
             <div class="relative h-40">
@@ -1786,7 +1798,6 @@ function renderCharts(data: DeliveryRow[]) {
           </div>
         </div>
 
-        <!-- LOT PROGRESS CARD -->
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-1 xl:col-span-4 overflow-hidden relative">
           <button id="toggle-macro-view-btn" class="absolute top-4 right-4 text-xs font-bold bg-slate-50 text-slate-500 hover:text-blue-600 px-2 py-1 flex items-center justify-center rounded hover:bg-slate-100 transition border border-slate-200 shadow-sm z-10" title="Toggle Macro View">
             <i class="fas fa-layer-group mr-1"></i> Macro View
@@ -1799,7 +1810,6 @@ function renderCharts(data: DeliveryRow[]) {
           </div>
         </div>
 
-        <!-- MODEL CARD -->
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-2 xl:col-span-1">
           <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="modelsTitle">${t("modelsTitle")}</h3>
           <div class="relative h-64">
@@ -1810,29 +1820,17 @@ function renderCharts(data: DeliveryRow[]) {
 
       <div class="flex flex-col lg:flex-row gap-6 p-4">
         <div class="flex-grow space-y-8 min-w-0">
-          <!-- Carriers -->
           <div>
             <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsCarrierTitle">${t("chartsCarrierTitle")}</h3>
             <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4" id="carrier-charts-grid"></div>
           </div>
-
-          <!-- Warehouses -->
           <div>
             <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsWarehouseTitle">${t("chartsWarehouseTitle")}</h3>
             <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4" id="warehouse-charts-grid"></div>
           </div>
         </div>
-
         <div class="w-full lg:w-64 shrink-0">
           ${customLegendHTML}
-        </div>
-      </div>
-
-      <!-- Lot Justifications -->
-      <div class="p-4">
-        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
-          <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2" data-i18n="chartsJustificationTitle">${t("chartsJustificationTitle")}</h3>
-          <div id="lot-justifications" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
         </div>
       </div>
     </div>
@@ -1840,9 +1838,7 @@ function renderCharts(data: DeliveryRow[]) {
 
   const macroBtn = document.getElementById("toggle-macro-view-btn");
   if (macroBtn) {
-    if (isMacroView) {
-      macroBtn.classList.add("bg-blue-50", "text-blue-600");
-    }
+    if (isMacroView) macroBtn.classList.add("bg-blue-50", "text-blue-600");
     macroBtn.addEventListener("click", () => {
       isMacroView = !isMacroView;
       renderCharts(data);
@@ -1866,16 +1862,14 @@ function renderCharts(data: DeliveryRow[]) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: "bottom", labels: { color: "#64748b", font: { size: 10 } } },
+          legend: { display: false },
           tooltip: {
             callbacks: {
               label: function(context: any) {
-                let label = context.label || '';
-                if (label) label += ': ';
                 let value = context.parsed || 0;
-                let total = context.chart._metasets[context.datasetIndex].total;
-                let percentage = total > 0 ? Math.round(value / total * 100) : 0;
-                return label + value + ' (' + percentage + '%)';
+                let totalSum = context.chart._metasets[context.datasetIndex].total;
+                let pct = totalSum > 0 ? Math.round(value / totalSum * 100) : 0;
+                return `${context.label}: ${value} (${pct}%)`;
               }
             }
           }
@@ -1884,7 +1878,6 @@ function renderCharts(data: DeliveryRow[]) {
     });
   }
 
-  // 2. Lot Progress (Bar)
   const lotStats: Record<string, { total: number; done: number; statusCounts: number[]; carriers: Set<string>; operations: Set<string> }> = {};
   data.forEach((row) => {
     const lot = String(row["LOT"] || "N/A");
@@ -1893,7 +1886,7 @@ function renderCharts(data: DeliveryRow[]) {
     const status = normalizeText(row["STATUS"] || "PENDENTE");
     if (status === "ENTREGUE") lotStats[lot].done++;
     lotStats[lot].statusCounts[getStatusIndex(status)]++;
-    const carrier = String(row["TRANSPORTATION COMPANY"] || row["CARRIER"] || "").trim().toUpperCase();
+    const carrier = String(row["TRANSPORTATION COMPANY"] || "").trim().toUpperCase();
     if (carrier) lotStats[lot].carriers.add(carrier);
     let operation = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
     if (operation) {
@@ -1905,11 +1898,6 @@ function renderCharts(data: DeliveryRow[]) {
 
   const sortedLots = Object.keys(lotStats).sort();
   const lotLabels = sortedLots;
-  const lotData = sortedLots.map((lot) => {
-    let total = lotStats[lot].total;
-    let done = lotStats[lot].done;
-    return total > 0 ? (done / total) * 100 : 0;
-  });
 
   const ctxLot = document.getElementById("lotChartCanvas") as HTMLCanvasElement;
   if (ctxLot) {
@@ -1935,35 +1923,14 @@ function renderCharts(data: DeliveryRow[]) {
           y: { stacked: true, beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "rgba(100, 116, 139, 0.1)" } }
         },
         plugins: {
-          legend: { display: true, position: 'bottom', labels: { color: "#64748b", font: { size: 10 } } },
+          legend: { display: false },
           datalabels: {
-            color: '#fff',
-            anchor: 'center',
-            align: 'center',
-            font: { size: 10, weight: 'bold' },
             formatter: (value: number) => value > 0 ? value : ''
-          },
-          tooltip: {
-            mode: 'index',
-            callbacks: {
-              afterBody: function(contexts: any[]) {
-                if (contexts.length === 0) return [];
-                const context = contexts[0];
-                const stat = lotStats[context.label];
-                let texts = [""];
-                if (stat && stat.carriers.size > 0) {
-                  texts.push(t("detailsCompany") + ": " + Array.from(stat.carriers).join(", "));
-                }
-                if (stat && stat.operations.size > 0) {
-                  texts.push(t("tableHeaderOperation") + ": " + Array.from(stat.operations).join(", "));
-                }
-                return texts;
-              }
-            }
           }
         }
       };
     } else {
+      const lotData = sortedLots.map((lot) => lotStats[lot].total > 0 ? (lotStats[lot].done / lotStats[lot].total) * 100 : 0);
       chartData = {
         labels: lotLabels,
         datasets: [{
@@ -1977,142 +1944,63 @@ function renderCharts(data: DeliveryRow[]) {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          y: { 
-            beginAtZero: true, 
-            max: 100,
-            ticks: { color: "#64748b", callback: (val: number) => val + "%" },
-            grid: { color: "rgba(100, 116, 139, 0.1)" }
-          },
-          x: { 
-            ticks: { color: "#64748b" },
-            grid: { display: false }
-          }
+          y: { beginAtZero: true, max: 100, ticks: { color: "#64748b" } },
+          x: { ticks: { color: "#64748b" }, grid: { display: false } }
         },
         plugins: {
           legend: { display: false },
           datalabels: {
-            color: '#fff',
-            anchor: 'end',
-            align: 'bottom',
             formatter: (value: number) => value > 0 ? value.toFixed(0) + '%' : ''
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context: any) {
-                return context.parsed.y.toFixed(1) + "% (" + lotStats[context.label].done + " de " + lotStats[context.label].total + ")";
-              },
-              afterLabel: function(context: any) {
-                const stat = lotStats[context.label];
-                let texts = [];
-                if (stat && stat.carriers.size > 0) {
-                  texts.push(t("detailsCompany") + ": " + Array.from(stat.carriers).join(", "));
-                }
-                if (stat && stat.operations.size > 0) {
-                  texts.push(t("tableHeaderOperation") + ": " + Array.from(stat.operations).join(", "));
-                }
-                return texts;
-              }
-            }
           }
         }
       };
     }
 
-    lotChart = new Chart(ctxLot, {
-      type: "bar",
-      data: chartData as any,
-      options: chartOptions as any
-    });
+    lotChart = new Chart(ctxLot, { type: "bar", data: chartData as any, options: chartOptions as any });
   }
 
-  // 2.5 Model Chart (Bar)
   const modelStats: Record<string, number> = {};
   data.forEach((row) => {
-    const modelStr = String(row["MODEL"] || "").trim().toUpperCase();
-    const model = modelStr ? modelStr : "OUTROS";
-    if (!modelStats[model]) modelStats[model] = 0;
-    modelStats[model]++;
+    const model = String(row["MODEL"] || "").trim().toUpperCase() || "OUTROS";
+    modelStats[model] = (modelStats[model] || 0) + 1;
   });
 
-  const sortedModels = Object.keys(modelStats).sort((a,b) => modelStats[b] - modelStats[a]); // Sort descending
-  const modelLabels = sortedModels;
-  const modelData = sortedModels.map(m => modelStats[m]);
-
+  const sortedModels = Object.keys(modelStats).sort((a,b) => modelStats[b] - modelStats[a]);
   const ctxModel = document.getElementById("modelChartCanvas") as HTMLCanvasElement;
   if (ctxModel) {
     modelChart = new Chart(ctxModel, {
       type: "bar",
       data: {
-        labels: modelLabels,
-        datasets: [{
-          label: "Quantidade",
-          data: modelData,
-          backgroundColor: "#8b5cf6",
-          borderRadius: 4
-        }]
+        labels: sortedModels,
+        datasets: [{ data: sortedModels.map(m => modelStats[m]), backgroundColor: "#8b5cf6", borderRadius: 4 }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        scales: {
-          y: { 
-            beginAtZero: true,
-            ticks: { color: "#64748b" },
-            grid: { color: "rgba(100, 116, 139, 0.1)" }
-          },
-          x: { 
-            ticks: { color: "#64748b" },
-            grid: { display: false }
-          }
-        },
-        plugins: {
-          legend: { display: false },
-          datalabels: {
-            color: '#fff',
-            anchor: 'end',
-            align: 'bottom',
-            formatter: (value: number) => value > 0 ? value : ''
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context: any) {
-                return "Qtd: " + context.parsed.y;
-              }
-            }
-          }
-        }
+        plugins: { legend: { display: false } }
       }
     });
   }
 
-  // 3. Carrier Charts (Pizza)
   const carrierStats: Record<string, number[]> = {};
   data.forEach((row) => {
     const carrier = String(row["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase() || "N/A";
     if (!carrierStats[carrier]) carrierStats[carrier] = [0, 0, 0, 0, 0, 0];
-    let s = normalizeText(row["STATUS"] || "PENDENTE");
-    carrierStats[carrier][getStatusIndex(s)]++;
+    carrierStats[carrier][getStatusIndex(normalizeText(row["STATUS"] || "PENDENTE"))]++;
   });
 
   const carrierGrid = document.getElementById("carrier-charts-grid");
   if (carrierGrid) {
     Object.keys(carrierStats).sort().forEach((carrier, idx) => {
       const containerId = `carrier-chart-${idx}`;
-      const total = carrierStats[carrier].reduce((a, b) => a + b, 0);
-      const cDelivered = carrierStats[carrier][0] || 0;
-      const cOthers = carrierStats[carrier][5] || 0;
-      const cEfficiency = total > 0 ? ((cDelivered / total) * 100).toFixed(1) : "0.0";
+      const carrierTotal = carrierStats[carrier].reduce((a, b) => a + b, 0);
+      const cEfficiency = carrierTotal > 0 ? ((carrierStats[carrier][0] / carrierTotal) * 100).toFixed(1) : "0.0";
 
       carrierGrid.insertAdjacentHTML("beforeend", `
         <div class="flex flex-col items-center">
-          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate" title="${carrier}">${carrier} (${total} cont)</h4>
-          <div class="relative h-48 w-full">
-            <canvas id="${containerId}"></canvas>
-          </div>
-          <div class="mt-2 text-center">
-            <span class="text-lg font-black text-[#0f172a] dark:text-slate-100">${cEfficiency}%</span>
-            <div class="text-[10px] font-bold text-slate-400" data-i18n="efic">${t("efic")}</div>
-          </div>
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate">${carrier} (${carrierTotal})</h4>
+          <div class="relative h-48 w-full"><canvas id="${containerId}"></canvas></div>
+          <div class="mt-2 text-center"><span class="text-lg font-black text-[#0f172a] dark:text-slate-100">${cEfficiency}%</span></div>
         </div>
       `);
       
@@ -2120,74 +2008,31 @@ function renderCharts(data: DeliveryRow[]) {
       if (ctx) {
         const cChart = new Chart(ctx, {
           type: "doughnut",
-          data: {
-            labels: statusLabels,
-            datasets: [{
-              data: carrierStats[carrier],
-              backgroundColor: Object.values(statusColors),
-              borderWidth: 2,
-              borderColor: "#ffffff"
-            }]
-          },
-          options: {
-            cutout: '45%',
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: { padding: 0 },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                titleFont: { size: 13 },
-                bodyFont: { size: 13, weight: 'bold' },
-                padding: 12,
-                cornerRadius: 8,
-                callbacks: {
-                  label: function(context: any) {
-                    return ` ${context.label}: ${context.raw} cont.`;
-                  }
-                }
-              },
-              datalabels: {
-                  color: '#ffffff',
-                  font: { size: 11, weight: 'bold' },
-                  textAlign: 'center',
-                  formatter: (value: number, context: any) => {
-                      if(value === 0) return '';
-                      let sum = context.chart.data.datasets[0].data.reduce((a:number, b:number) => a + b, 0);
-                      let pct = (value * 100 / sum).toFixed(0);
-                      if (Number(pct) <= 5) return value;
-                      return `${value}\n(${pct}%)`;
-                  }
-              }
-            }
-          }
+          data: { labels: statusLabels, datasets: [{ data: carrierStats[carrier], backgroundColor: Object.values(statusColors) }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
         carrierCharts.push(cChart);
       }
     });
   }
 
-  // 4. Warehouse Charts (Pizza)
   const warehouseStats: Record<string, number[]> = {};
   data.forEach((row) => {
     const wh = String(row["BONDED WAREHOUSE"] || "N/A").trim().toUpperCase() || "N/A";
     if (!warehouseStats[wh]) warehouseStats[wh] = [0, 0, 0, 0, 0, 0];
-    let s = normalizeText(row["STATUS"] || "PENDENTE");
-    warehouseStats[wh][getStatusIndex(s)]++;
+    warehouseStats[wh][getStatusIndex(normalizeText(row["STATUS"] || "PENDENTE"))]++;
   });
 
   const warehouseGrid = document.getElementById("warehouse-charts-grid");
   if (warehouseGrid) {
     Object.keys(warehouseStats).sort().forEach((wh, idx) => {
       const containerId = `warehouse-chart-${idx}`;
-      const total = warehouseStats[wh].reduce((a, b) => a + b, 0);
+      const whTotal = warehouseStats[wh].reduce((a, b) => a + b, 0);
+
       warehouseGrid.insertAdjacentHTML("beforeend", `
         <div class="flex flex-col items-center">
-          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate" title="${wh}">${wh} (${total} cont)</h4>
-          <div class="relative h-48 w-full">
-            <canvas id="${containerId}"></canvas>
-          </div>
+          <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2 w-full text-center truncate">${wh} (${whTotal})</h4>
+          <div class="relative h-48 w-full"><canvas id="${containerId}"></canvas></div>
         </div>
       `);
       
@@ -2195,88 +2040,270 @@ function renderCharts(data: DeliveryRow[]) {
       if (ctx) {
         const wChart = new Chart(ctx, {
           type: "doughnut",
-          data: {
-            labels: statusLabels,
-            datasets: [{
-              data: warehouseStats[wh],
-              backgroundColor: Object.values(statusColors),
-              borderWidth: 2,
-              borderColor: "#ffffff"
-            }]
-          },
-          options: {
-            cutout: '45%',
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: { padding: 0 },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                titleFont: { size: 13 },
-                bodyFont: { size: 13, weight: 'bold' },
-                padding: 12,
-                cornerRadius: 8,
-                callbacks: {
-                  label: function(context: any) {
-                    return ` ${context.label}: ${context.raw} cont.`;
-                  }
-                }
-              },
-              datalabels: {
-                  color: '#ffffff',
-                  font: { size: 11, weight: 'bold' },
-                  textAlign: 'center',
-                  formatter: (value: number, context: any) => {
-                      if(value === 0) return '';
-                      let sum = context.chart.data.datasets[0].data.reduce((a:number, b:number) => a + b, 0);
-                      let pct = (value * 100 / sum).toFixed(0);
-                      if (Number(pct) <= 5) return value;
-                      return `${value}\n(${pct}%)`;
-                  }
-              }
-            }
-          }
+          data: { labels: statusLabels, datasets: [{ data: warehouseStats[wh], backgroundColor: Object.values(statusColors) }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
         warehouseCharts.push(wChart);
       }
     });
   }
-
-  // 5. Lot Justifications
-  const lotJustificationsGrid = document.getElementById("lot-justifications");
-  if (lotJustificationsGrid) {
-    sortedLots.forEach((lot) => {
-      const savedKey = `justification_${lot}`;
-      const savedVal = localStorage.getItem(savedKey) || "";
-      
-      lotJustificationsGrid.insertAdjacentHTML("beforeend", `
-        <div class="flex flex-col space-y-1">
-          <label class="text-xs font-bold text-slate-600 dark:text-slate-300">Lote ${lot}</label>
-          <textarea 
-            class="w-full text-sm p-2 rounded border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
-            rows="2" 
-            placeholder="${t("chartsJustificationPlaceholder")}"
-            data-lot="${lot}"
-          >${savedVal}</textarea>
-        </div>
-      `);
-    });
-
-    // Add event listener to save justification on blur/input
-    lotJustificationsGrid.querySelectorAll("textarea").forEach((ta) => {
-      ta.addEventListener("input", (e) => {
-        const target = e.target as HTMLTextAreaElement;
-        const lot = target.dataset.lot;
-        if (lot) {
-           localStorage.setItem(`justification_${lot}`, target.value);
-        }
-      });
-    });
-  }
 }
 
-/* ----------------------- XLSX PARSER (IMPROVED) ---------------------------- */
+/* --------------------------------- BLOG ----------------------------------- */
+function renderNewsTab(data: DeliveryRow[]) {
+  const newsContent = document.getElementById("news-content");
+  if (!newsContent) return;
+
+  const sortedPosts = [...blogPosts].sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    return dateB - dateA;
+  });
+
+  const featuredPost = sortedPosts[0];
+  const secondaryPosts = sortedPosts.slice(1, 4);
+  const remainingPosts = sortedPosts.slice(4);
+
+  const total = data.length;
+  const delivered = data.filter(d => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
+  const transit = data.filter(d => normalizeText(d["STATUS"] || "") === "A CAMINHO").length;
+  const efficiency = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
+  const uniqueLots = Array.from(new Set(data.map(d => String(d["LOT"] || "N/A")))).sort();
+
+  newsContent.innerHTML = `
+    <div class="bg-slate-50 dark:bg-slate-900/50 min-h-screen">
+      <div class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 py-1 px-4 mb-6">
+        <div class="max-w-7xl mx-auto flex items-center overflow-hidden">
+          <div class="bg-slate-900 text-white px-2 py-0.5 text-[10px] font-black uppercase tracking-widest mr-4 flex-shrink-0">${t("newsBreaking")}</div>
+          <div class="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
+            ${sortedPosts.length > 0 ? sortedPosts[0].title : t("newsWaiting")}
+          </div>
+          <div class="ml-auto flex gap-2">
+             <button id="add-news-btn" class="text-blue-600 hover:text-blue-700 font-black text-[10px] uppercase tracking-wider flex items-center">
+               <i class="fas fa-plus-circle mr-1"></i> ${t("newsNewUpdate")}
+             </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="max-w-7xl mx-auto px-4 pb-12">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div class="lg:col-span-8 flex flex-col gap-8">
+            ${featuredPost ? `
+              <div class="relative group cursor-pointer overflow-hidden rounded-2xl shadow-2xl bg-slate-200 aspect-[16/9] lg:aspect-[21/9]">
+                ${featuredPost.image ? `<img src="${featuredPost.image}" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110">` : `<div class="absolute inset-0 flex items-center justify-center bg-slate-800"><i class="fas fa-newspaper text-6xl text-slate-700"></i></div>`}
+                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                <div class="absolute bottom-0 left-0 p-8 w-full">
+                  <span class="bg-blue-600 text-white px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded mb-3 inline-block">${featuredPost.category || 'GENERAL'}</span>
+                  <h1 class="text-3xl lg:text-5xl font-black text-white leading-tight mb-4">${featuredPost.title}</h1>
+                  <p class="text-slate-200 text-sm mb-4 line-clamp-2">${featuredPost.text}</p>
+                  <div class="flex items-center text-slate-300 text-xs font-bold gap-4">
+                    <span><i class="fas fa-user-edit mr-1"></i> ${featuredPost.author || 'Supervisão'}</span>
+                    <span><i class="fas fa-clock mr-1"></i> ${featuredPost.createdAt?.toDate ? featuredPost.createdAt.toDate().toLocaleDateString() : (featuredPost.createdAt ? new Date(featuredPost.createdAt).toLocaleDateString() : t("today"))}</span>
+                  </div>
+                </div>
+                <button class="delete-post-btn absolute top-4 right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100" data-id="${featuredPost.id}">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+              </div>
+            ` : `
+              <div class="bg-white dark:bg-slate-800 p-20 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center">
+                 <i class="fas fa-newspaper text-5xl text-slate-300 mb-4 block"></i>
+                 <p class="text-slate-500 font-bold">${t("newsNoPosts")}</p>
+              </div>
+            `}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              ${secondaryPosts.map(post => `
+                <div class="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-md border border-slate-100 dark:border-slate-700 group hover:shadow-xl transition-all">
+                  <div class="relative h-48 bg-slate-200 overflow-hidden">
+                    ${post.image ? `<img src="${post.image}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-all">` : `<div class="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-900"><i class="fas fa-image text-2xl text-slate-300"></i></div>`}
+                    <div class="absolute top-3 left-3 bg-slate-900 text-white px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded">${post.category || 'GERAL'}</div>
+                  </div>
+                  <div class="p-5">
+                    <h3 class="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 leading-tight">${post.title}</h3>
+                    <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed line-clamp-3 mb-4">${post.text}</p>
+                    <div class="flex justify-between items-center">
+                      <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">${post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Recent'}</span>
+                      <button class="delete-post-btn text-red-500 hover:text-red-600 text-xs" data-id="${post.id}"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+
+            <div class="flex flex-col gap-4 mt-4">
+              <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 dark:border-slate-700 pb-2">${t("newsOlder")}</h4>
+              ${remainingPosts.map(post => `
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl flex gap-4 items-center shadow-sm border border-slate-100 dark:border-slate-700 group">
+                  <div class="w-16 h-16 rounded overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-slate-700">
+                    ${post.image ? `<img src="${post.image}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center"><i class="fas fa-image text-slate-300"></i></div>`}
+                  </div>
+                  <div class="min-w-0 flex-grow">
+                    <h5 class="font-bold text-slate-800 dark:text-slate-100 text-sm line-clamp-1">${post.title}</h5>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${post.text}</p>
+                  </div>
+                  <div class="text-[10px] text-slate-300 font-bold ml-auto">${post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : ''}</div>
+                  <button class="delete-post-btn text-slate-300 hover:text-red-500 transition-colors ml-2" data-id="${post.id}"><i class="fas fa-times"></i></button>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="lg:col-span-4 flex flex-col gap-8">
+            <div class="bg-slate-900 rounded-2xl p-6 text-white shadow-xl">
+              <h3 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">${t("newsStayConnected")}</h3>
+              <div class="space-y-4">
+                <div class="flex items-center justify-between group p-2 rounded">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded flex items-center justify-center font-black">OP</div>
+                    <div>
+                      <div class="text-xs font-bold">${t("newsEffTitle")}</div>
+                      <div class="text-[10px] text-blue-400 font-medium">${efficiency}% Successful</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between group p-2 rounded">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-emerald-600 rounded flex items-center justify-center font-black">TR</div>
+                    <div>
+                      <div class="text-xs font-bold">${t("newsTransitTitle")}</div>
+                      <div class="text-[10px] text-emerald-400 font-medium">${transit} Units Moving</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-8 pt-8 border-t border-white/10">
+                 <div class="bg-blue-600 hover:bg-blue-700 p-4 rounded-xl text-center font-black text-xs uppercase tracking-widest cursor-pointer transition-all active:scale-95" id="sidebar-add-btn">
+                   <i class="fas fa-plus mr-2"></i> ${t("newsPostNew")}
+                 </div>
+              </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden">
+               <div class="p-6">
+                 <h4 class="text-xs font-black tracking-widest text-slate-400 uppercase mb-4">${t("newsLotJust")}</h4>
+                 <div class="max-h-[300px] overflow-y-auto pr-2 space-y-4 mb-4 custom-scrollbar">
+                    ${uniqueLots.map(lot => `
+                      <div>
+                        <label class="text-[10px] font-black uppercase text-slate-500 mb-1 block">Lote ${lot}</label>
+                        <textarea class="lot-side-note w-full p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-700 dark:text-slate-300 resize-none focus:ring-2 focus:ring-blue-500 outline-none transition-all" rows="2" data-lot="${lot}" placeholder="Nota do lote...">${lotJustifications[lot] || ""}</textarea>
+                      </div>
+                    `).join("")}
+                 </div>
+                 <button id="save-lot-notes-btn" class="w-full bg-slate-900 dark:bg-slate-700 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95">
+                    ${t("newsSaveNotes")} <i class="fas fa-save ml-2"></i>
+                 </button>
+               </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden">
+               <div class="p-6">
+                 <h4 class="text-xs font-black tracking-widest text-slate-400 uppercase mb-4">${t("newsAddInfo")}</h4>
+                 <textarea id="general-operation-notes" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 min-h-[150px] resize-none focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Qualquer informação necessária...">${generalNotes}</textarea>
+                 <button id="save-general-notes-btn" class="w-full mt-4 bg-blue-600 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
+                    ${t("newsSaveAlerts")} <i class="fas fa-check ml-2"></i>
+                 </button>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="blog-modal" class="hidden fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="bg-slate-900 p-6 flex justify-between items-center">
+           <h3 class="text-white font-black uppercase tracking-widest text-sm">${t("newsModalTitle")}</h3>
+           <button class="text-white/50 hover:text-white" id="close-blog-modal"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div class="p-8 flex-grow overflow-y-auto">
+          <div class="space-y-6">
+            <div>
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Título do Post</label>
+              <input id="post-title" type="text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold outline-none">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+               <div>
+                  <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Categoria</label>
+                  <select id="post-category" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold outline-none">
+                    <option value="GERAL">GERAL</option>
+                    <option value="OPERAÇÃO">OPERAÇÃO</option>
+                    <option value="ALERTA">ALERTA</option>
+                    <option value="SUCESSO">SUCESSO</option>
+                  </select>
+               </div>
+               <div>
+                  <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Autor</label>
+                  <input id="post-author" type="text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold outline-none" value="Supervisão">
+               </div>
+            </div>
+            <div>
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Conteúdo</label>
+              <textarea id="post-text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none resize-none min-h-[200px]"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex gap-4">
+           <button id="cancel-post-btn" class="flex-1 py-4 font-black uppercase tracking-widest text-sm text-slate-500 hover:text-slate-800">Descartar</button>
+           <button id="save-post-btn" class="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm">${t("newsPublish")} <i class="fas fa-paper-plane ml-2"></i></button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach dynamic event triggers inside structural template literals
+  const modal = document.getElementById("blog-modal");
+  document.getElementById("add-news-btn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
+  document.getElementById("sidebar-add-btn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
+  document.getElementById("close-blog-modal")?.addEventListener("click", () => modal?.classList.add("hidden"));
+  document.getElementById("cancel-post-btn")?.addEventListener("click", () => modal?.classList.add("hidden"));
+
+  document.getElementById("save-post-btn")?.addEventListener("click", async () => {
+    const title = (document.getElementById("post-title") as HTMLInputElement).value;
+    const text = (document.getElementById("post-text") as HTMLTextAreaElement).value;
+    const category = (document.getElementById("post-category") as HTMLSelectElement).value;
+    const author = (document.getElementById("post-author") as HTMLInputElement).value;
+
+    if (!title || !text) return showToast("Por favor, preencha o título e o conteúdo.", "warning");
+
+    blogPosts.unshift({ id: Date.now().toString(), title, text, category, author, createdAt: new Date() });
+    showToast("Notícia publicada com sucesso!", "success");
+    modal?.classList.add("hidden");
+    await saveStateToFirebase();
+    renderNewsTab(deliveryData);
+  });
+
+  document.getElementById("save-lot-notes-btn")?.addEventListener("click", async () => {
+    const lotNotes: Record<string, string> = {};
+    newsContent.querySelectorAll(".lot-side-note").forEach(ta => {
+      const el = ta as HTMLTextAreaElement;
+      if (el.dataset.lot) lotNotes[el.dataset.lot] = el.value;
+    });
+    lotJustifications = { ...lotJustifications, ...lotNotes };
+    showToast("Notas dos lotes salvas com sucesso!", "success");
+    await saveStateToFirebase();
+  });
+
+  document.getElementById("save-general-notes-btn")?.addEventListener("click", async () => {
+    generalNotes = (document.getElementById("general-operation-notes") as HTMLTextAreaElement).value;
+    showToast("Avisos gerais salvos!", "success");
+    await saveStateToFirebase();
+  });
+
+  newsContent.querySelectorAll(".delete-post-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Tem certeza que deseja excluir esta notícia?")) return;
+      const id = (e.currentTarget as HTMLElement).dataset.id;
+      blogPosts = blogPosts.filter(p => p.id !== id);
+      await saveStateToFirebase();
+      renderNewsTab(deliveryData);
+    });
+  });
+}
+
+/* ----------------------- ARRIVALS & METRICS ---------------------------- */
 function renderArrivalsTable() {
   const arrivalsContent = document.getElementById("arrivals-content");
   if (!arrivalsContent) return;
@@ -2284,13 +2311,10 @@ function renderArrivalsTable() {
   const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
   const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
   const statusKeys: Record<string, string> = {
-    "A CAMINHO": "STATUS_A_CAMINHO",
-    "ADIADO": "STATUS_ADIADO",
-    "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA",
-    "ENTREGUE": "STATUS_ENTREGUE"
+    "A CAMINHO": "STATUS_A_CAMINHO", "ADIADO": "STATUS_ADIADO", "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA", "ENTREGUE": "STATUS_ENTREGUE"
   };
 
-  const tableHtml = `
+  arrivalsContent.innerHTML = `
     <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
       <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300">
         <thead class="bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600">
@@ -2301,27 +2325,21 @@ function renderArrivalsTable() {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-          ${lotsFromData
-            .map((lot) => {
+          ${lotsFromData.map((lot) => {
               const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
               const statusCounts = statuses.reduce((acc, s) => {
                 acc[s] = deliveriesInLot.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
                 return acc;
               }, {} as Record<string, number>);
               const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
-
-              const models = Array.from(new Set(deliveriesInLot.map(d => String(d["MODEL"] || "")).filter(m => m !== ""))).join(", ");
-              const lotDisplay = models ? `${lot} - ${models}` : lot;
-
               if (total === 0) return "";
-
+              const models = Array.from(new Set(deliveriesInLot.map(d => String(d["MODEL"] || "")).filter(m => m !== ""))).join(", ");
               return `<tr>
-                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${lotDisplay}</td>
+                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${models ? `${lot} - ${models}` : lot}</td>
                 ${statuses.map((s) => `<td class="px-4 py-3">${statusCounts[s] > 0 ? statusCounts[s] : ""}</td>`).join("")}
                 <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${total}</td>
               </tr>`;
-            })
-            .join("")}
+            }).join("")}
         </tbody>
         <tfoot class="bg-slate-50 dark:bg-slate-700 border-t border-slate-200 dark:border-slate-600 font-bold">
           <tr>
@@ -2333,37 +2351,20 @@ function renderArrivalsTable() {
       </table>
     </div>
   `;
-  arrivalsContent.innerHTML = tableHtml;
 }
 
 function renderTimeTable(data: DeliveryRow[]) {
   const timeContent = document.getElementById("time-content");
   if (!timeContent) return;
 
-  let totalTimeSum = 0;
-  let validRecords = 0;
-  
-  let totalTimeSumP1 = 0;
-  let validRecordsP1 = 0;
-  
-  let totalTimeSumP2 = 0;
-  let validRecordsP2 = 0;
+  let totalTimeSum = 0, validRecords = 0;
+  let totalTimeSumP1 = 0, validRecordsP1 = 0;
+  let totalTimeSumP2 = 0, validRecordsP2 = 0;
 
   const rowsHtml = data.map((row) => {
-    const container = String(row["CONTAINER"] || "-");
-    const bl = String(row["BL"] || "-");
-    const carrier = String(row["TRANSPORTATION COMPANY"] || "-");
-    const lot = String(row["LOT"] || "-");
-
     const startDt = toDateTimeMaybe(row["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]);
-    let endDt = toDateTimeMaybe(row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]);
-    if (!endDt) endDt = toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA NA BYD "]); // fallback
-
-    let fullTimeString = "-";
-    let durationHours = 0;
-
-    let startDisplay = startDt ? formatDate(row["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]) + " " + formatTime(startDt) : "-";
-    let endDisplay = endDt ? (row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"] ? formatDate(row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]) : formatDate(row["DATA E HORARIO DE DESCARGA NA BYD "])) + " " + formatTime(endDt) : "-";
+    let endDt = toDateTimeMaybe(row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA NA BYD "]);
+    let fullTimeString = "-", durationHours = 0;
 
     if (startDt && endDt) {
       const diffMs = endDt.getTime() - startDt.getTime();
@@ -2372,137 +2373,74 @@ function renderTimeTable(data: DeliveryRow[]) {
         const dDays = Math.floor(durationHours / 24);
         const dHours = Math.floor(durationHours % 24);
         const dMins = Math.round((durationHours - Math.floor(durationHours)) * 60);
-        if (dDays > 0) fullTimeString = `${dDays}d ${dHours}h ${dMins}m`;
-        else fullTimeString = `${dHours}h ${dMins}m`;
+        fullTimeString = dDays > 0 ? `${dDays}d ${dHours}h ${dMins}m` : `${dHours}h ${dMins}m`;
 
-        totalTimeSum += durationHours;
-        validRecords++;
-        
-        // Periods classification
-        const h = startDt.getHours();
-        const m = startDt.getMinutes();
-        const timeVal = h * 100 + m;
-
-        // Period 1: 06:30 - 15:00
-        if (timeVal >= 630 && timeVal <= 1500) {
-          totalTimeSumP1 += durationHours;
-          validRecordsP1++;
-        } 
-        // Period 2: 15:01 - 00:00
-        else if (timeVal >= 1501 || (h === 0 && m === 0)) {
-          totalTimeSumP2 += durationHours;
-          validRecordsP2++;
-        }
+        totalTimeSum += durationHours; validRecords++;
+        const timeVal = startDt.getHours() * 100 + startDt.getMinutes();
+        if (timeVal >= 630 && timeVal <= 1500) { totalTimeSumP1 += durationHours; validRecordsP1++; }
+        else if (timeVal >= 1501 || (startDt.getHours() === 0 && startDt.getMinutes() === 0)) { totalTimeSumP2 += durationHours; validRecordsP2++; }
       }
     }
 
-    return `
-      <tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-        <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">${container}</td>
-        <td class="px-4 py-3 text-slate-600 dark:text-slate-300 font-mono">${bl}</td>
-        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${carrier}</td>
-        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${lot}</td>
-        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${startDisplay}</td>
-        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${endDisplay}</td>
+    return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+        <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">${row["CONTAINER"] || "-"}</td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300 font-mono">${row["BL"] || "-"}</td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${row["TRANSPORTATION COMPANY"] || "-"}</td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${row["LOT"] || "-"}</td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400">${startDt ? startDt.toLocaleString() : "-"}</td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400">${endDt ? endDt.toLocaleString() : "-"}</td>
         <td class="px-4 py-3 font-bold text-blue-600 dark:text-blue-400">${fullTimeString}</td>
-      </tr>
-    `;
+      </tr>`;
   }).join("");
 
   const formatAvg = (sum: number, count: number) => {
     if (count === 0) return "-";
     const avgH = sum / count;
-    const aDays = Math.floor(avgH / 24);
-    const aHours = Math.floor(avgH % 24);
-    const aMins = Math.round((avgH - Math.floor(avgH)) * 60);
-    if (aDays > 0) return `${aDays}d ${aHours}h ${aMins}m`;
-    return `${aHours}h ${aMins}m`;
+    const aDays = Math.floor(avgH / 24), aHours = Math.floor(avgH % 24), aMins = Math.round((avgH - Math.floor(avgH)) * 60);
+    return aDays > 0 ? `${aDays}d ${aHours}h ${aMins}m` : `${aHours}h ${aMins}m`;
   };
 
-  const avgTimeStr = formatAvg(totalTimeSum, validRecords);
-  const avgTimeP1 = formatAvg(totalTimeSumP1, validRecordsP1);
-  const avgTimeP2 = formatAvg(totalTimeSumP2, validRecordsP2);
-
-  const tableHtml = `
+  timeContent.innerHTML = `
     <div class="mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:flex-row justify-between items-center gap-4">
        <div>
          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-1" data-i18n="timeTab">${t("timeTab")}</h3>
-         <p class="text-xs text-slate-500 dark:text-slate-400">Total registers with valid time: <strong class="text-slate-700 dark:text-slate-200">${validRecords}</strong></p>
+         <p class="text-xs text-slate-500 dark:text-slate-400">Registros válidos: <strong class="text-slate-700 dark:text-slate-200">${validRecords}</strong></p>
        </div>
-       <div class="flex flex-wrap gap-4 w-full md:w-auto justify-end">
-         <!-- Total Avg -->
-         <div class="flex items-center bg-blue-50 dark:bg-blue-900/30 px-5 py-2.5 rounded-lg border border-blue-100 dark:border-blue-800">
-           <i class="fas fa-clock text-blue-500 text-lg mr-3"></i>
-           <div class="flex flex-col">
-             <span class="text-[9px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider" data-i18n="tableHeaderTimeAvg">${t("tableHeaderTimeAvg")} (Total)</span>
-             <span class="text-lg font-black text-blue-700 dark:text-blue-300">${avgTimeStr}</span>
-           </div>
+       <div class="flex flex-wrap gap-4 justify-end">
+         <div class="bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-lg border border-blue-100">
+           <span class="text-[9px] font-bold text-blue-500 block uppercase">Média Geral</span>
+           <span class="text-base font-black text-blue-700 dark:text-blue-300">${formatAvg(totalTimeSum, validRecords)}</span>
          </div>
-         <!-- P1 Avg -->
-         <div class="flex items-center bg-emerald-50 dark:bg-emerald-900/30 px-5 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-800">
-           <i class="fas fa-sun text-emerald-500 text-lg mr-3"></i>
-           <div class="flex flex-col">
-             <span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider" data-i18n="avgPeriod1">${t("avgPeriod1")}</span>
-             <span class="text-lg font-black text-emerald-700 dark:text-emerald-300">${avgTimeP1}</span>
-           </div>
+         <div class="bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 rounded-lg border border-emerald-100">
+           <span class="text-[9px] font-bold text-emerald-600 block uppercase">${t("avgPeriod1")}</span>
+           <span class="text-base font-black text-emerald-700 dark:text-emerald-300">${formatAvg(totalTimeSumP1, validRecordsP1)}</span>
          </div>
-         <!-- P2 Avg -->
-         <div class="flex items-center bg-amber-50 dark:bg-amber-900/30 px-5 py-2.5 rounded-lg border border-amber-100 dark:border-amber-800">
-           <i class="fas fa-moon text-amber-500 text-lg mr-3"></i>
-           <div class="flex flex-col">
-             <span class="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider" data-i18n="avgPeriod2">${t("avgPeriod2")}</span>
-             <span class="text-lg font-black text-amber-700 dark:text-amber-300">${avgTimeP2}</span>
-           </div>
+         <div class="bg-amber-50 dark:bg-amber-900/30 px-4 py-2 rounded-lg border border-amber-100">
+           <span class="text-[9px] font-bold text-amber-600 block uppercase">${t("avgPeriod2")}</span>
+           <span class="text-base font-black text-amber-700 dark:text-amber-300">${formatAvg(totalTimeSumP2, validRecordsP2)}</span>
          </div>
        </div>
     </div>
-    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-h-[600px]">
-      <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300">
-        <thead class="bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
-          <tr>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Container</th>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">B/L</th>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderCompany">${t("tableHeaderCompany")}</th>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderLot">${t("tableHeaderLot")}</th>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderStart">${t("tableHeaderStart")}</th>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderEnd">${t("tableHeaderEnd")}</th>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider" data-i18n="tableHeaderFullTime">${t("tableHeaderFullTime")}</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-          ${rowsHtml}
-        </tbody>
-      </table>
+    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-h-[400px]">
+      <table class="w-full text-xs text-left"><tbody class="divide-y">${rowsHtml}</tbody></table>
     </div>
   `;
-  timeContent.innerHTML = tableHtml;
 }
 
+/* ----------------------- XLSX PARSER & SAVE ---------------------------- */
 function buildHeaderIndex(headers: any[]): Record<string, number> {
   const idx: Record<string, number> = {};
-  headers.forEach((h, i) => {
-    const n = normalizeText(h);
-    if (n) idx[n] = i;
-  });
+  headers.forEach((h, i) => { const n = normalizeText(h); if (n) idx[n] = i; });
   return idx;
 }
 
 function pickIndex(hIdx: Record<string, number>, aliases: string[]): number {
-  for (const a of aliases) {
-    const key = normalizeText(a);
-    if (key in hIdx) return hIdx[key];
-  }
+  for (const a of aliases) { const key = normalizeText(a); if (key in hIdx) return hIdx[key]; }
   return -1;
 }
 
 function makeRowId(row: any): string {
-  const c = String(row["CONTAINER"] || "").trim();
-  const bl = String(row["BL"] || "").trim();
-  const date = String(row["DELIVERY AT BYD"] || "").trim();
-  const w = String(row["BONDED WAREHOUSE"] || "").trim();
-  const tco = String(row["TRANSPORTATION COMPANY"] || "").trim();
-  // stable enough
-  return normalizeText(`${c}|${bl}|${date}|${w}|${tco}`) || String(Math.random());
+  return normalizeText(`${row["CONTAINER"]}|${row["BL"]}|${row["DELIVERY AT BYD"]}|${row["BONDED WAREHOUSE"]}`) || String(Math.random());
 }
 
 fileUpload?.addEventListener("change", (e) => {
@@ -2510,7 +2448,6 @@ fileUpload?.addEventListener("change", (e) => {
   if (!file) return;
 
   const reader = new FileReader();
-
   reader.onload = async (ev) => {
     try {
       const workbook = XLSX.read(new Uint8Array(ev.target!.result as ArrayBuffer), { type: "array" });
@@ -2518,138 +2455,67 @@ fileUpload?.addEventListener("change", (e) => {
       const sheet = workbook.Sheets[sheetName];
       if (!sheet) throw new Error("Sheet not found");
 
-      // Read as array-of-arrays
       const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-
-      // Find header row: first row that has "CONTAINER" column label
-      let hRow = rawData.findIndex((r) => r.some((c) => normalizeText(c).includes("CONTAINER") && normalizeText(c) === "CONTAINER"));
-      if (hRow === -1) {
-        // fallback: any row containing "CONTAINER" as a cell
-        hRow = rawData.findIndex((r) => r.some((c) => normalizeText(c) === "CONTAINER"));
-      }
+      let hRow = rawData.findIndex((r) => r.some((c) => normalizeText(c) === "CONTAINER"));
       if (hRow === -1) hRow = 0;
 
       const headers = rawData[hRow] || [];
       const headerIndex = buildHeaderIndex(headers);
 
-      // Aliases matching your sheet columns
       const col = {
-        DELIVERY_AT_BYD: pickIndex(headerIndex, ["DELIVERY AT BYD", "DELIVERY", "DATA DE ENTREGA", "ENTREGA NA BYD"]),
-        UNLOAD_TIME_BYD: pickIndex(headerIndex, ["UNLOAD TIME BYD", "UNLOAD TIME", "HORARIO DE DESCARGA"]),
+        DELIVERY_AT_BYD: pickIndex(headerIndex, ["DELIVERY AT BYD", "DELIVERY", "DATA DE ENTREGA"]),
+        UNLOAD_TIME_BYD: pickIndex(headerIndex, ["UNLOAD TIME BYD", "UNLOAD TIME"]),
         TRANSPORTATION_COMPANY: pickIndex(headerIndex, ["TRANSPORTATION COMPANY", "CARRIER", "TRANSPORTADORA"]),
-        CPF: pickIndex(headerIndex, ["CPF"]),
-        DRIVER_NAME: pickIndex(headerIndex, ["DRIVER NAME", "MOTORISTA"]),
-        PLATE_1: pickIndex(headerIndex, ["TRUCK LICENSE PLATE 1", "PLATE 1", "PLACA 1", "TRUCK PLATE 1"]),
-        PLATE_2: pickIndex(headerIndex, ["TRUCK LICENSE PLATE 2", "PLATE 2", "PLACA 2", "TRUCK PLATE 2"]),
-        RETURN_DEPOT_SCHEDULE: pickIndex(headerIndex, ["RETURN DEPOT SCHEDULE"]),
-        OPERATION_SCOPE: pickIndex(headerIndex, ["OPERATION SCOPE", "SCOPE"]),
         CONTAINER: pickIndex(headerIndex, ["CONTAINER"]),
         BL: pickIndex(headerIndex, ["BL", "B/L"]),
         VESSEL: pickIndex(headerIndex, ["VESSEL", "NAVIO"]),
-        BONDED_WAREHOUSE: pickIndex(headerIndex, ["BONDED WAREHOUSE", "WAREHOUSE", "ARMAZEM"]),
+        BONDED_WAREHOUSE: pickIndex(headerIndex, ["BONDED WAREHOUSE", "ARMAZEM"]),
         MODEL: pickIndex(headerIndex, ["MODEL", "MODELO"]),
-        ETA_SALVADOR: pickIndex(headerIndex, ["ETA SALVADOR", "ETA"]),
-        PO_SAP: pickIndex(headerIndex, ["PO SAP", "PO"]),
-        NF: pickIndex(headerIndex, ["NF", "NOTA FISCAL"]),
         LOT: pickIndex(headerIndex, ["LOT", "LOTE"]),
-        DEMURRAGE: pickIndex(headerIndex, ["DEMURRAGE"]),
-        SHIP_OWNER: pickIndex(headerIndex, ["SHIP OWNER", "ARMADOR"]),
         TYPE_OF_MATERIAL: pickIndex(headerIndex, ["TYPE OF MATERIAL", "MATERIAL"]),
-        CONTAINER_COST: pickIndex(headerIndex, ["CONTAINER COST", "COST"]),
         STATUS: pickIndex(headerIndex, ["STATUS", "SITUACAO"]),
-        TRUCK_TYPE: pickIndex(headerIndex, ["TRUCK TYPE"]),
-        LOADING_WINDOW: pickIndex(headerIndex, ["DATA E HORARIO DE CARREGAMENTO (PREVISÃO / JANELA)", "LOADING", "JANELA"]),
-        PORT_ARRIVAL: pickIndex(headerIndex, ["PORT ARRIVAL"]),
-        TERMINAL_DEPARTURE: pickIndex(headerIndex, ["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.", "TERMINAL DEPARTURE"]),
-        ETA_BYD_FORECAST: pickIndex(headerIndex, ["PREVISÃO DATA E HORARIO DE CHEGADA NA BYD", "ETA BYD"]),
-        UNLOAD_AT_BYD: pickIndex(headerIndex, ["DATA E HORARIO DE DESCARGA NA BYD ", "DESCARGA NA BYD"]),
-        EMPTY_DELIVERED: pickIndex(headerIndex, ["DATA E HORARIO DE ENTREGA CONTAINER VAZIO", "EMPTY DELIVERY"]),
-        DEPOT: pickIndex(headerIndex, ["DEPOT"]),
-        REF: pickIndex(headerIndex, ["REF", "REFERENCE", "REFERENCIA"]),
-        NOTES: pickIndex(headerIndex, ["NOTES", "OBSERVACOES", "OBSERVAÇÕES", "Conversamos amanhã sobre a referência"]),
+        TERMINAL_DEPARTURE: pickIndex(headerIndex, ["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]),
+        EMPTY_DELIVERED: pickIndex(headerIndex, ["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]),
+        UNLOAD_AT_BYD: pickIndex(headerIndex, ["DATA E HORARIO DE DESCARGA NA BYD "]),
+        NOTES: pickIndex(headerIndex, ["NOTES", "OBSERVACOES", "OBSERVAÇÕES"]),
       };
 
-      const dataRows = rawData.slice(hRow + 1);
-
-      const parsed: DeliveryRow[] = dataRows
-        .filter((r) => {
-          const c = col.CONTAINER >= 0 ? safeValue(r[col.CONTAINER]) : "";
-          const bl = col.BL >= 0 ? safeValue(r[col.BL]) : "";
-          return String(c || "").trim() || String(bl || "").trim();
-        })
-        .map((r) => {
-          const obj: any = {};
-          // Keep the original header names as in the sheet, for export compatibility
-          headers.forEach((h, i) => {
-            const key = String(h || "").trim();
-            if (!key) return;
-            obj[key] = safeValue(r[i]);
-          });
-
-          // Ensure our main canonical keys exist (used by UI)
-          obj["DELIVERY AT BYD"] = col.DELIVERY_AT_BYD >= 0 ? safeValue(r[col.DELIVERY_AT_BYD]) : "";
-          obj["UNLOAD TIME BYD"] = col.UNLOAD_TIME_BYD >= 0 ? safeValue(r[col.UNLOAD_TIME_BYD]) : "";
-          obj["TRANSPORTATION COMPANY"] = col.TRANSPORTATION_COMPANY >= 0 ? safeValue(r[col.TRANSPORTATION_COMPANY]) : "";
-          obj["CPF"] = col.CPF >= 0 ? safeValue(r[col.CPF]) : "";
-          obj["DRIVER NAME"] = col.DRIVER_NAME >= 0 ? safeValue(r[col.DRIVER_NAME]) : "";
-          obj["TRUCK LICENSE PLATE 1"] = col.PLATE_1 >= 0 ? safeValue(r[col.PLATE_1]) : "";
-          obj["TRUCK LICENSE PLATE 2"] = col.PLATE_2 >= 0 ? safeValue(r[col.PLATE_2]) : "";
-          obj["RETURN DEPOT SCHEDULE"] = col.RETURN_DEPOT_SCHEDULE >= 0 ? safeValue(r[col.RETURN_DEPOT_SCHEDULE]) : "";
-          obj["OPERATION SCOPE"] = col.OPERATION_SCOPE >= 0 ? safeValue(r[col.OPERATION_SCOPE]) : "";
-          obj["CONTAINER"] = col.CONTAINER >= 0 ? safeValue(r[col.CONTAINER]) : "";
-          obj["BL"] = col.BL >= 0 ? safeValue(r[col.BL]) : "";
-          obj["VESSEL"] = col.VESSEL >= 0 ? safeValue(r[col.VESSEL]) : "";
-          obj["BONDED WAREHOUSE"] = col.BONDED_WAREHOUSE >= 0 ? safeValue(r[col.BONDED_WAREHOUSE]) : "";
-          obj["MODEL"] = col.MODEL >= 0 ? safeValue(r[col.MODEL]) : "";
-          obj["ETA SALVADOR"] = col.ETA_SALVADOR >= 0 ? safeValue(r[col.ETA_SALVADOR]) : "";
-          obj["PO SAP"] = col.PO_SAP >= 0 ? safeValue(r[col.PO_SAP]) : "";
-          obj["NF"] = col.NF >= 0 ? safeValue(r[col.NF]) : "";
-          obj["LOT"] = col.LOT >= 0 ? safeValue(r[col.LOT]) : "";
-          obj["DEMURRAGE"] = col.DEMURRAGE >= 0 ? safeValue(r[col.DEMURRAGE]) : "";
-          obj["SHIP OWNER"] = col.SHIP_OWNER >= 0 ? safeValue(r[col.SHIP_OWNER]) : "";
-          obj["TYPE OF MATERIAL"] = col.TYPE_OF_MATERIAL >= 0 ? safeValue(r[col.TYPE_OF_MATERIAL]) : "";
-          obj["CONTAINER COST"] = col.CONTAINER_COST >= 0 ? safeValue(r[col.CONTAINER_COST]) : "";
-          obj["TRUCK TYPE"] = col.TRUCK_TYPE >= 0 ? safeValue(r[col.TRUCK_TYPE]) : "";
-          obj["PORT ARRIVAL"] = col.PORT_ARRIVAL >= 0 ? safeValue(r[col.PORT_ARRIVAL]) : "";
-          obj["DATA E HORARIO DE CARREGAMENTO (PREVISÃO / JANELA)"] = col.LOADING_WINDOW >= 0 ? safeValue(r[col.LOADING_WINDOW]) : "";
-          obj["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."] = col.TERMINAL_DEPARTURE >= 0 ? safeValue(r[col.TERMINAL_DEPARTURE]) : "";
-          obj["PREVISÃO DATA E HORARIO DE CHEGADA NA BYD"] = col.ETA_BYD_FORECAST >= 0 ? safeValue(r[col.ETA_BYD_FORECAST]) : "";
-          obj["DATA E HORARIO DE DESCARGA NA BYD "] = col.UNLOAD_AT_BYD >= 0 ? safeValue(r[col.UNLOAD_AT_BYD]) : "";
-          obj["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"] = col.EMPTY_DELIVERED >= 0 ? safeValue(r[col.EMPTY_DELIVERED]) : "";
-          obj["DEPOT"] = col.DEPOT >= 0 ? safeValue(r[col.DEPOT]) : "";
-          obj["REF"] = col.REF >= 0 ? safeValue(r[col.REF]) : "";
-
-          const notesVal =
-            col.NOTES >= 0 ? safeValue(r[col.NOTES]) : safeValue(obj["NOTES"] || obj["Conversamos amanhã sobre a referência"] || "");
-          obj["NOTES"] = notesVal;
-
-          // STATUS: if sheet formula is broken (#REF!) default to PENDENTE
-          const statusRaw = col.STATUS >= 0 ? safeValue(r[col.STATUS]) : "";
-          obj["STATUS"] = sanitizeStatus(statusRaw);
-
-          // Stable id
-          obj._id = makeRowId(obj);
-
-          return obj as DeliveryRow;
-        });
-
-      deliveryData = parsed;
+      deliveryData = rawData.slice(hRow + 1).filter(r => safeValue(r[col.CONTAINER]) || safeValue(r[col.BL])).map((r) => {
+        const obj: any = {};
+        headers.forEach((h, i) => { if (h) obj[String(h).trim()] = safeValue(r[i]); });
+        
+        obj["DELIVERY AT BYD"] = col.DELIVERY_AT_BYD >= 0 ? safeValue(r[col.DELIVERY_AT_BYD]) : "";
+        obj["UNLOAD TIME BYD"] = col.UNLOAD_TIME_BYD >= 0 ? safeValue(r[col.UNLOAD_TIME_BYD]) : "";
+        obj["TRANSPORTATION COMPANY"] = col.TRANSPORTATION_COMPANY >= 0 ? safeValue(r[col.TRANSPORTATION_COMPANY]) : "";
+        obj["CONTAINER"] = col.CONTAINER >= 0 ? safeValue(r[col.CONTAINER]) : "";
+        obj["BL"] = col.BL >= 0 ? safeValue(r[col.BL]) : "";
+        obj["VESSEL"] = col.VESSEL >= 0 ? safeValue(r[col.VESSEL]) : "";
+        obj["BONDED WAREHOUSE"] = col.BONDED_WAREHOUSE >= 0 ? safeValue(r[col.BONDED_WAREHOUSE]) : "";
+        obj["MODEL"] = col.MODEL >= 0 ? safeValue(r[col.MODEL]) : "";
+        obj["LOT"] = col.LOT >= 0 ? safeValue(r[col.LOT]) : "";
+        obj["TYPE OF MATERIAL"] = col.TYPE_OF_MATERIAL >= 0 ? safeValue(r[col.TYPE_OF_MATERIAL]) : "";
+        obj["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."] = col.TERMINAL_DEPARTURE >= 0 ? safeValue(r[col.TERMINAL_DEPARTURE]) : "";
+        obj["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"] = col.EMPTY_DELIVERED >= 0 ? safeValue(r[col.EMPTY_DELIVERED]) : "";
+        obj["DATA E HORARIO DE DESCARGA NA BYD "] = col.UNLOAD_AT_BYD >= 0 ? safeValue(r[col.UNLOAD_AT_BYD]) : "";
+        obj["NOTES"] = col.NOTES >= 0 ? safeValue(r[col.NOTES]) : "";
+        obj["STATUS"] = sanitizeStatus(col.STATUS >= 0 ? safeValue(r[col.STATUS]) : "");
+        obj._id = makeRowId(obj);
+        return obj;
+      });
 
       if (lastUpdate) {
         lastUpdate.dataset.sheetName = sheetName;
-        lastUpdate.textContent = t("lastUpdateText", sheetName, new Date().toLocaleString(currentLanguage, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        lastUpdate.textContent = t("lastUpdateText", sheetName, new Date().toLocaleString());
       }
 
       showToast(t("sheetLoaded"), "success");
+      await saveStateToFirebase();
       applyFiltersAndRender();
-      saveStateToFirebase();
     } catch (err) {
       console.error(err);
       showToast(t("fileProcessError"), "error");
     }
   };
-
-  reader.onerror = () => showToast(t("fileReadError"), "error");
   reader.readAsArrayBuffer(file);
 });
 
@@ -2657,237 +2523,45 @@ fileUpload?.addEventListener("change", (e) => {
 exportExcelBtn?.addEventListener("click", async () => {
   if (!deliveryData || deliveryData.length === 0) return showToast(t("noDataToExport"), "warning");
 
-  // Define fixed column sequence
   const exportColumns = [
-    "STATUS",
-    "DELIVERY AT BYD",
-    "CONTAINER",
-    "BL",
-    "LOT",
-    "MODEL",
-    "OPERATION SCOPE",
-    "TRANSPORTATION COMPANY",
-    "VESSEL",
-    "BONDED WAREHOUSE",
-    "DRIVER NAME",
-    "CPF",
-    "TRUCK LICENSE PLATE 1",
-    "TRUCK LICENSE PLATE 2",
-    "TRUCK TYPE",
-    "DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.", // START - YELLOW
-    "DATA E HORARIO DE DESCARGA NA BYD ",
-    "DATA E HORARIO DE ENTREGA CONTAINER VAZIO", // FINISH - GREEN
-    "UNLOAD TIME BYD",
-    "RETURN DEPOT SCHEDULE",
-    "ETA SALVADOR",
-    "PO SAP",
-    "NF",
-    "DEMURRAGE",
-    "SHIP OWNER",
-    "TYPE OF MATERIAL",
-    "CONTAINER COST",
-    "PORT ARRIVAL",
-    "DATA E HORARIO DE CARREGAMENTO (PREVISÃO / JANELA)",
-    "PREVISÃO DATA E HORARIO DE CHEGADA NA BYD",
-    "DEPOT",
-    "REF",
-    "NOTES"
+    "STATUS", "DELIVERY AT BYD", "CONTAINER", "BL", "LOT", "MODEL", "OPERATION SCOPE", "TRANSPORTATION COMPANY", 
+    "VESSEL", "BONDED WAREHOUSE", "DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.", 
+    "DATA E HORARIO DE DESCARGA NA BYD ", "DATA E HORARIO DE ENTREGA CONTAINER VAZIO", "UNLOAD TIME BYD", "NOTES"
   ];
 
-  const startIndex = exportColumns.indexOf("DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.");
-  const finishIndex = exportColumns.indexOf("DATA E HORARIO DE ENTREGA CONTAINER VAZIO");
-
-  // Prepare data with correct sequence
-  const dataRows = deliveryData.map((d) => {
-    return exportColumns.map(col => d[col] ?? "");
-  });
-
-  // Create sheet with headers
-  const wsData = [exportColumns, ...dataRows];
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  // Apply Styles (if using xlsx-js-style)
-  // Header Style
-  const headerStyle = {
-    fill: { fgColor: { rgb: "CCDAFF" } },
-    font: { bold: true, color: { rgb: "000000" } },
-    alignment: { horizontal: "center" },
-    border: {
-      top: { style: "thin", color: { rgb: "000000" } },
-      bottom: { style: "thin", color: { rgb: "000000" } },
-      left: { style: "thin", color: { rgb: "000000" } },
-      right: { style: "thin", color: { rgb: "000000" } }
-    }
-  };
-
-  const startStyle = {
-    fill: { fgColor: { rgb: "FFFF00" } }, // Yellow
-    font: { bold: true },
-    alignment: { horizontal: "center" },
-    border: {
-      top: { style: "thin", color: { rgb: "000000" } },
-      bottom: { style: "thin", color: { rgb: "000000" } },
-      left: { style: "thin", color: { rgb: "000000" } },
-      right: { style: "thin", color: { rgb: "000000" } }
-    }
-  };
-
-  const finishStyle = {
-    fill: { fgColor: { rgb: "90EE90" } }, // Light Green
-    font: { bold: true },
-    alignment: { horizontal: "center" },
-    border: {
-      top: { style: "thin", color: { rgb: "000000" } },
-      bottom: { style: "thin", color: { rgb: "000000" } },
-      left: { style: "thin", color: { rgb: "000000" } },
-      right: { style: "thin", color: { rgb: "000000" } }
-    }
-  };
-
-  const range = XLSX.utils.decode_range(ws['!ref'] || "A1");
-
-  for (let R = range.s.r; R <= range.e.r; ++R) {
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-      if (!ws[cellAddress]) continue;
-
-      // Header row
-      if (R === 0) {
-        ws[cellAddress].s = headerStyle;
-        if (C === startIndex) {
-            ws[cellAddress].s = { ...headerStyle, fill: { fgColor: { rgb: "FFFF00" } } };
-        } else if (C === finishIndex) {
-            ws[cellAddress].s = { ...headerStyle, fill: { fgColor: { rgb: "90EE90" } } };
-        }
-      } else {
-        // Data rows
-        if (C === startIndex) {
-          ws[cellAddress].s = startStyle;
-        } else if (C === finishIndex) {
-          ws[cellAddress].s = finishStyle;
-        } else {
-          // Default data style
-          ws[cellAddress].s = {
-            alignment: { horizontal: "center" },
-            border: {
-              top: { style: "thin", color: { rgb: "DDDDDD" } },
-              bottom: { style: "thin", color: { rgb: "DDDDDD" } },
-              left: { style: "thin", color: { rgb: "DDDDDD" } },
-              right: { style: "thin", color: { rgb: "DDDDDD" } }
-            }
-          };
-        }
-      }
-    }
-  }
-
+  const ws = XLSX.utils.aoa_to_sheet([exportColumns, ...deliveryData.map(d => exportColumns.map(col => d[col] ?? ""))]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, t("deliveriesTab"));
 
-  // Create Arrivals per Lot sheet
+  // Append Standardized Minutes layout style logic inside spreadsheet generation
   try {
     const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
     const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
-    const statusKeys: Record<string, string> = {
-      "A CAMINHO": "STATUS_A_CAMINHO",
-      "ADIADO": "STATUS_ADIADO",
-      "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA",
-      "ENTREGUE": "STATUS_ENTREGUE"
-    };
-
+    
     const arrivalsOut = lotsFromData.map((lot) => {
       const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
-      const models = Array.from(new Set(deliveriesInLot.map(d => String(d["MODEL"] || "")).filter(m => m !== ""))).join(", ");
-      const lotDisplay = models ? `${lot} - ${models}` : lot;
-
-      const row: any = {
-        [t("tableHeaderLot")]: lotDisplay,
-      };
-      
-      let total = 0;
-      statuses.forEach((s) => {
-        const count = deliveriesInLot.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
-        row[t(statusKeys[s] as TranslationKey)] = count > 0 ? count : "";
-        total += count;
-      });
-      
-      row[t("tableHeaderTotal")] = total;
+      const row: any = { "Lote / Modelo": lot };
+      statuses.forEach(s => row[s] = deliveriesInLot.filter(d => normalizeText(d["STATUS"] || "") === normalizeText(s)).length || "");
       return row;
     });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(arrivalsOut), t("arrivalsTab"));
+  } catch(e) { console.error(e); }
 
-    const overallRow: any = {
-      [t("tableHeaderLot")]: t("tableHeaderOverallTotal"),
-    };
-    let overallGrandTotal = 0;
-    statuses.forEach((s) => {
-      const count = deliveryData.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
-      overallRow[t(statusKeys[s] as TranslationKey)] = count;
-      overallGrandTotal += count;
-    });
-    overallRow[t("tableHeaderTotal")] = overallGrandTotal;
-    
-    arrivalsOut.push(overallRow);
-
-    const wsArrivals = XLSX.utils.json_to_sheet(arrivalsOut);
-    XLSX.utils.book_append_sheet(wb, wsArrivals, t("arrivalsTab"));
-  } catch(e) {
-    console.error("Failed to append arrivals sheet", e);
-  }
-
-  // Add Inventory Sheet if data exists
+  // Append Inventory tab data to master excel file seamlessly
   try {
     const inventoryData = (window as any).inventoryExportData;
     if (inventoryData && inventoryData.sections) {
-      const inventoryRows: any[] = [];
-      
-      // Headers for Inventory
-      inventoryRows.push([
-        "CATEGORY", 
-        "LOCATION", 
-        "EMPTY", 
-        "FULL", 
-        "TOTAL", 
-        "CAPACITY", 
-        "UTILIZATION (%)"
-      ]);
-
+      const inventoryRows = [["CATEGORIA", "LOCALIZAÇÃO", "VAZIO", "CHEIO", "TOTAL", "CAPACIDADE"]];
       inventoryData.sections.forEach((sec: any) => {
         sec.locations.forEach((loc: any) => {
-          const total = (loc.empty || 0) + (loc.full || 0);
-          const utilization = loc.capacity > 0 ? ((total / loc.capacity) * 100).toFixed(1) + "%" : "0%";
-          
-          inventoryRows.push([
-            sec.title,
-            loc.name,
-            loc.empty,
-            loc.full,
-            total,
-            loc.capacity,
-            utilization
-          ]);
+          inventoryRows.push([sec.title, loc.name, loc.empty, loc.full, (loc.empty + loc.full), loc.capacity]);
         });
       });
-
-      // Add Aging info as well
-      inventoryRows.push([]);
-      inventoryRows.push(["INVENTORY AGING SUMMARY"]);
-      inventoryRows.push(["1-7 Days", inventoryData.aging['1-7d'] || "0"]);
-      inventoryRows.push(["8-15 Days", inventoryData.aging['8-15d'] || "0"]);
-      inventoryRows.push(["16-30 Days", inventoryData.aging['16-30d'] || "0"]);
-      inventoryRows.push(["30+ Days", inventoryData.aging['30d+'] || "0"]);
-      
-      inventoryRows.push([]);
-      inventoryRows.push(["BUFFER METRICS"]);
-      inventoryRows.push(["Avg. Stay Time (Days)", inventoryData.avgStay || "0.0"]);
-
-      const wsInventory = XLSX.utils.aoa_to_sheet(inventoryRows);
-      XLSX.utils.book_append_sheet(wb, wsInventory, t("inventoryTab") || "Inventory");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inventoryRows), t("inventoryTab"));
     }
-  } catch (e) {
-    console.error("Failed to append inventory sheet", e);
-  }
+  } catch (e) { console.error(e); }
 
-  XLSX.writeFile(wb, `Entregas_${new Date().toISOString().split("T")[0]}.xlsx`);
+  XLSX.writeFile(wb, `KD_Monitor_Report_${new Date().toISOString().split("T")[0]}.xlsx`);
   showToast(t("excelGenerated"), "success");
 });
 
@@ -2895,28 +2569,16 @@ exportPdfBtn?.addEventListener("click", async () => {
   if (!deliveryData || deliveryData.length === 0) return showToast(t("noDataToExport"), "warning");
   try {
     const doc = new (jspdf as any).jsPDF({ orientation: "landscape" });
-    doc.text(t("pdfTitle"), 40, 40);
+    doc.text(t("pdfTitle"), 14, 15);
     (doc as any).autoTable({
-      head: [["#", "DELIVERY", "CONTAINER", "BL", "CARRIER", "VESSEL", "WAREHOUSE", "STATUS"]],
-      body: deliveryData.map((d, i) => [
-        i + 1,
-        formatDate(d["DELIVERY AT BYD"]),
-        d["CONTAINER"] || "",
-        d["BL"] || "",
-        d["TRANSPORTATION COMPANY"] || "",
-        d["VESSEL"] || "",
-        d["BONDED WAREHOUSE"] || "",
-        sanitizeStatus(d["STATUS"]),
-      ]),
-      startY: 60,
+      head: [["#", "DELIVERY", "CONTAINER", "BL", "CARRIER", "LOT", "STATUS"]],
+      body: deliveryData.map((d, i) => [i + 1, formatDate(d["DELIVERY AT BYD"]), d["CONTAINER"] || "", d["BL"] || "", d["TRANSPORTATION COMPANY"] || "", d["LOT"] || "", sanitizeStatus(d["STATUS"])]),
+      startY: 25,
       styles: { fontSize: 8 },
     });
-    doc.save("deliveries.pdf");
+    doc.save("KD_Deliveries_Report.pdf");
     showToast(t("pdfGenerated"), "success");
-  } catch (e) {
-    console.error(e);
-    showToast(t("fileProcessError"), "error");
-  }
+  } catch (e) { console.error(e); showToast(t("fileProcessError"), "error"); }
 });
 
 /* ------------------------------ STARTUP ----------------------------------- */
