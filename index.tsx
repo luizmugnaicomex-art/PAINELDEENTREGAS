@@ -162,6 +162,7 @@ const translations = {
     STATUS_ENTREGUE: "Entregue",
     STATUS_CANCELADO: "Cancelado",
     STATUS_AGUARDANDO_DESOVA: "Aguardando Desova",
+    STATUS_BACKLOG: "Backlog",
     detailsTitle: "Detalhes",
     detailsVessel: "Navio (Vessel)",
     detailsWarehouse: "Armazém",
@@ -185,6 +186,8 @@ const translations = {
     tableHeaderEnd: "Fim",
     tableHeaderFullTime: "Tempo Total",
     tableHeaderTimeAvg: "Tempo Médio",
+    avgPeriod1: "1º Período (06:30 - 15:00)",
+    avgPeriod2: "2º Período (15:01 - 00:00)",
     chartsOverviewTitle: "Visão Geral da Operação",
     chartsLotProgressTitle: "Progresso por Lote",
     chartsCarrierTitle: "Desempenho por Transportadora",
@@ -278,6 +281,7 @@ const translations = {
     STATUS_ENTREGUE: "Delivered",
     STATUS_CANCELADO: "Canceled",
     STATUS_AGUARDANDO_DESOVA: "Awaiting Unload",
+    STATUS_BACKLOG: "Backlog",
     detailsTitle: "Details",
     detailsVessel: "Vessel",
     detailsWarehouse: "Warehouse",
@@ -301,6 +305,8 @@ const translations = {
     tableHeaderEnd: "End",
     tableHeaderFullTime: "Total Time",
     tableHeaderTimeAvg: "Average Time",
+    avgPeriod1: "1st Period (06:30 - 15:00)",
+    avgPeriod2: "2nd Period (15:01 - 00:00)",
     chartsOverviewTitle: "Operation Overview",
     chartsLotProgressTitle: "Progress by Lot",
     chartsCarrierTitle: "Carrier Performance",
@@ -393,6 +399,7 @@ const translations = {
     STATUS_ENTREGUE: "已交付",
     STATUS_CANCELADO: "已取消",
     STATUS_AGUARDANDO_DESOVA: "等待卸货",
+    STATUS_BACKLOG: "积压 (Backlog)",
     detailsTitle: "详细信息",
     detailsVessel: "船名",
     detailsWarehouse: "仓库",
@@ -416,6 +423,8 @@ const translations = {
     tableHeaderEnd: "终点",
     tableHeaderFullTime: "总时间",
     tableHeaderTimeAvg: "平均时间",
+    avgPeriod1: "第一段 (06:30 - 15:00)",
+    avgPeriod2: "第二段 (15:01 - 00:00)",
     chartsOverviewTitle: "运营概览",
     chartsLotProgressTitle: "按批次进度",
     chartsCarrierTitle: "承运人绩效",
@@ -454,6 +463,7 @@ const statusKeyMap: { [key: string]: TranslationKey } = {
   ADIADO: "STATUS_ADIADO",
   ENTREGUE: "STATUS_ENTREGUE",
   CANCELADO: "STATUS_CANCELADO",
+  BACKLOG: "STATUS_BACKLOG",
   "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA",
 };
 
@@ -872,6 +882,8 @@ function getStatusDetails(status: string) {
       return { icon: "fa-times-circle", pillBg: "bg-red-100 dark:bg-red-900/50", pillText: "text-red-700 dark:text-red-300" };
     case "AGUARDANDO DESOVA":
       return { icon: "fa-box", pillBg: "bg-purple-100 dark:bg-purple-900/50", pillText: "text-purple-700 dark:text-purple-300" };
+    case "BACKLOG":
+      return { icon: "fa-history", pillBg: "bg-orange-100 dark:bg-orange-900/50", pillText: "text-orange-700 dark:text-orange-300" };
     default:
       return { icon: "fa-hourglass-half", pillBg: "bg-slate-200 dark:bg-slate-700", pillText: "text-slate-700 dark:text-slate-200" };
   }
@@ -997,8 +1009,9 @@ function updateStats() {
   const inTransit = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "A CAMINHO").length;
   const postponed = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "ADIADO").length;
   const canceled = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "CANCELADO").length;
+  const backlog = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "BACKLOG").length;
   const awaitingUnload = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "AGUARDANDO DESOVA").length;
-  const pending = Math.max(0, total - delivered - inTransit - postponed - canceled - awaitingUnload);
+  const pending = Math.max(0, total - delivered - inTransit - postponed - canceled - awaitingUnload - backlog);
 
   const getPercentage = (count: number) => total === 0 ? "0%" : `${((count / total) * 100).toFixed(1)}%`;
 
@@ -1006,7 +1019,7 @@ function updateStats() {
     const isAll = cardStatus === "ALL";
     const isActive = activeStatusFilter === cardStatus || (activeStatusFilter === null && isAll);
     let classes =
-      "summary-card bg-white dark:bg-slate-800 p-5 rounded-lg shadow-sm border flex items-center cursor-pointer transition-all duration-200";
+      "summary-card bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm border flex items-center cursor-pointer transition-all duration-200";
     if (isActive) classes += " border-blue-500 ring-2 ring-blue-500/50 scale-[1.02] z-10";
     else classes += " border-slate-200 dark:border-slate-700 hover:border-blue-300";
     return classes;
@@ -1015,78 +1028,89 @@ function updateStats() {
   if (!summaryStats) return;
   summaryStats.innerHTML = `
     <div class="${getCardClasses("ALL")}" data-status="ALL">
-      <div class="bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-box-open text-lg"></i>
+      <div class="bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-box-open text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("totalContainers")}">${t("totalContainers")}</div>
-        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${total}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("totalContainers")}">${t("totalContainers")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${total}</div>
       </div>
     </div>
 
     <div class="${getCardClasses("ENTREGUE")}" data-status="ENTREGUE">
-      <div class="bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-check-circle text-lg"></i>
+      <div class="bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-check-circle text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("delivered")}">${t("delivered")}</div>
-        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${delivered}</div>
-        <div class="text-[10px] font-bold text-green-600 dark:text-green-400">${getPercentage(delivered)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("delivered")}">${t("delivered")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${delivered}</div>
+        <div class="text-[9px] font-bold text-green-600 dark:text-green-400">${getPercentage(delivered)}</div>
       </div>
     </div>
 
     <div class="${getCardClasses("AGUARDANDO DESOVA")}" data-status="AGUARDANDO DESOVA">
-      <div class="bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-box text-lg"></i>
+      <div class="bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-box text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("awaitingUnload")}">${t("awaitingUnload")}</div>
-        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${awaitingUnload}</div>
-        <div class="text-[10px] font-bold text-purple-600 dark:text-purple-400">${getPercentage(awaitingUnload)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("awaitingUnload")}">${t("awaitingUnload")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${awaitingUnload}</div>
+        <div class="text-[9px] font-bold text-purple-600 dark:text-purple-400">${getPercentage(awaitingUnload)}</div>
       </div>
     </div>
 
     <div class="${getCardClasses("A CAMINHO")}" data-status="A CAMINHO">
-      <div class="bg-yellow-100 dark:bg-yellow-900/50 text-yellow-600 dark:text-yellow-400 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-truck text-lg"></i>
+      <div class="bg-yellow-100 dark:bg-yellow-900/50 text-yellow-600 dark:text-yellow-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-truck text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("inTransit")}">${t("inTransit")}</div>
-        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${inTransit}</div>
-        <div class="text-[10px] font-bold text-yellow-600 dark:text-yellow-400">${getPercentage(inTransit)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("inTransit")}">${t("inTransit")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${inTransit}</div>
+        <div class="text-[9px] font-bold text-yellow-600 dark:text-yellow-400">${getPercentage(inTransit)}</div>
       </div>
     </div>
 
     <div class="${getCardClasses("PENDENTE")}" data-status="PENDENTE">
-      <div class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-hourglass-half text-lg"></i>
+      <div class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-hourglass-half text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("pending")}">${t("pending")}</div>
-        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${pending}</div>
-        <div class="text-[10px] font-bold text-slate-600 dark:text-slate-400">${getPercentage(pending)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("pending")}">${t("pending")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${pending}</div>
+        <div class="text-[9px] font-bold text-slate-600 dark:text-slate-400">${getPercentage(pending)}</div>
       </div>
     </div>
 
     <div class="${getCardClasses("ADIADO")}" data-status="ADIADO">
-      <div class="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-calendar-alt text-lg"></i>
+      <div class="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-calendar-alt text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-[10px] font-semibold uppercase tracking-wider truncate" title="${t("postponed")}">${t("postponed")}</div>
-        <div class="text-xl font-extrabold text-slate-800 dark:text-slate-100">${postponed}</div>
-        <div class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">${getPercentage(postponed)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("postponed")}">${t("postponed")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${postponed}</div>
+        <div class="text-[9px] font-bold text-indigo-600 dark:text-indigo-400">${getPercentage(postponed)}</div>
+      </div>
+    </div>
+
+    <div class="${getCardClasses("BACKLOG")}" data-status="BACKLOG">
+      <div class="bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-history text-sm"></i>
+      </div>
+      <div class="min-w-0">
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="Backlog">Backlog</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${backlog}</div>
+        <div class="text-[9px] font-bold text-orange-600 dark:text-orange-400">${getPercentage(backlog)}</div>
       </div>
     </div>
 
     <div class="${getCardClasses("CANCELADO")}" data-status="CANCELADO">
-      <div class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full h-10 w-10 flex items-center justify-center mr-3 flex-shrink-0">
-        <i class="fas fa-times-circle text-lg"></i>
+      <div class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
+        <i class="fas fa-times-circle text-sm"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider truncate">${t("canceled")}</div>
-        <div class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">${canceled}</div>
-        <div class="text-xs font-bold text-red-600 dark:text-red-400">${getPercentage(canceled)}</div>
+        <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate">${t("canceled")}</div>
+        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${canceled}</div>
+        <div class="text-[9px] font-bold text-red-600 dark:text-red-400">${getPercentage(canceled)}</div>
       </div>
     </div>
   `;
@@ -1362,7 +1386,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                   <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 font-medium">${row["LOT"] || "-"}</td>
                   <td class="px-4 py-3 text-xs">
                     <select class="status-select bg-white dark:bg-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-500 text-xs rounded-md p-1 w-full" data-row-id="${row._id}">
-                      ${["PENDENTE", "AGUARDANDO DESOVA", "A CAMINHO", "ADIADO", "ENTREGUE", "CANCELADO"]
+                      ${["PENDENTE", "AGUARDANDO DESOVA", "A CAMINHO", "ADIADO", "BACKLOG", "ENTREGUE", "CANCELADO"]
                         .map((opt) => `<option value="${opt}" ${status === opt ? "selected" : ""}>${t(statusKeyMap[opt])}</option>`)
                         .join("")}
                     </select>
@@ -1493,12 +1517,13 @@ function sanitizeStatus(raw: any): string {
   if (s === "DELIVERED") return "ENTREGUE";
   if (s === "IN TRANSIT") return "A CAMINHO";
   if (s === "POSTPONED") return "ADIADO";
+  if (s === "BACKLOG") return "BACKLOG";
   if (s === "CANCELED" || s === "CANCELLED") return "CANCELADO";
   if (s === "AWAITING UNLOAD") return "AGUARDANDO DESOVA";
   // if user sheet has garbage like #REF!
   if (isExcelErrorString(raw)) return "PENDENTE";
   // keep only our options if unknown
-  if (!["PENDENTE", "A CAMINHO", "ADIADO", "ENTREGUE", "CANCELADO", "AGUARDANDO DESOVA"].includes(s)) return "PENDENTE";
+  if (!["PENDENTE", "A CAMINHO", "ADIADO", "ENTREGUE", "CANCELADO", "AGUARDANDO DESOVA", "BACKLOG"].includes(s)) return "PENDENTE";
   return s;
 }
 
@@ -2315,8 +2340,14 @@ function renderTimeTable(data: DeliveryRow[]) {
 
   let totalTimeSum = 0;
   let validRecords = 0;
+  
+  let totalTimeSumP1 = 0;
+  let validRecordsP1 = 0;
+  
+  let totalTimeSumP2 = 0;
+  let validRecordsP2 = 0;
 
-  const rowsHtml = data.map((row, idx) => {
+  const rowsHtml = data.map((row) => {
     const container = String(row["CONTAINER"] || "-");
     const bl = String(row["BL"] || "-");
     const carrier = String(row["TRANSPORTATION COMPANY"] || "-");
@@ -2344,6 +2375,22 @@ function renderTimeTable(data: DeliveryRow[]) {
 
         totalTimeSum += durationHours;
         validRecords++;
+        
+        // Periods classification
+        const h = startDt.getHours();
+        const m = startDt.getMinutes();
+        const timeVal = h * 100 + m;
+
+        // Period 1: 06:30 - 15:00
+        if (timeVal >= 630 && timeVal <= 1500) {
+          totalTimeSumP1 += durationHours;
+          validRecordsP1++;
+        } 
+        // Period 2: 15:01 - 00:00
+        else if (timeVal >= 1501 || (h === 0 && m === 0)) {
+          totalTimeSumP2 += durationHours;
+          validRecordsP2++;
+        }
       }
     }
 
@@ -2360,27 +2407,50 @@ function renderTimeTable(data: DeliveryRow[]) {
     `;
   }).join("");
 
-  let avgTimeStr = "-";
-  if (validRecords > 0) {
-    const avgH = totalTimeSum / validRecords;
+  const formatAvg = (sum: number, count: number) => {
+    if (count === 0) return "-";
+    const avgH = sum / count;
     const aDays = Math.floor(avgH / 24);
     const aHours = Math.floor(avgH % 24);
     const aMins = Math.round((avgH - Math.floor(avgH)) * 60);
-    if (aDays > 0) avgTimeStr = `${aDays}d ${aHours}h ${aMins}m`;
-    else avgTimeStr = `${aHours}h ${aMins}m`;
-  }
+    if (aDays > 0) return `${aDays}d ${aHours}h ${aMins}m`;
+    return `${aHours}h ${aMins}m`;
+  };
+
+  const avgTimeStr = formatAvg(totalTimeSum, validRecords);
+  const avgTimeP1 = formatAvg(totalTimeSumP1, validRecordsP1);
+  const avgTimeP2 = formatAvg(totalTimeSumP2, validRecordsP2);
 
   const tableHtml = `
-    <div class="mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:flex-row justify-between items-center">
+    <div class="mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:flex-row justify-between items-center gap-4">
        <div>
          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-1" data-i18n="timeTab">${t("timeTab")}</h3>
          <p class="text-xs text-slate-500 dark:text-slate-400">Total registers with valid time: <strong class="text-slate-700 dark:text-slate-200">${validRecords}</strong></p>
        </div>
-       <div class="mt-4 md:mt-0 flex items-center bg-blue-50 dark:bg-blue-900/30 px-6 py-3 rounded-lg border border-blue-100 dark:border-blue-800">
-         <i class="fas fa-clock text-blue-500 text-xl mr-3"></i>
-         <div class="flex flex-col">
-           <span class="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider" data-i18n="tableHeaderTimeAvg">${t("tableHeaderTimeAvg")}</span>
-           <span class="text-xl font-black text-blue-700 dark:text-blue-300">${avgTimeStr}</span>
+       <div class="flex flex-wrap gap-4 w-full md:w-auto justify-end">
+         <!-- Total Avg -->
+         <div class="flex items-center bg-blue-50 dark:bg-blue-900/30 px-5 py-2.5 rounded-lg border border-blue-100 dark:border-blue-800">
+           <i class="fas fa-clock text-blue-500 text-lg mr-3"></i>
+           <div class="flex flex-col">
+             <span class="text-[9px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider" data-i18n="tableHeaderTimeAvg">${t("tableHeaderTimeAvg")} (Total)</span>
+             <span class="text-lg font-black text-blue-700 dark:text-blue-300">${avgTimeStr}</span>
+           </div>
+         </div>
+         <!-- P1 Avg -->
+         <div class="flex items-center bg-emerald-50 dark:bg-emerald-900/30 px-5 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-800">
+           <i class="fas fa-sun text-emerald-500 text-lg mr-3"></i>
+           <div class="flex flex-col">
+             <span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider" data-i18n="avgPeriod1">${t("avgPeriod1")}</span>
+             <span class="text-lg font-black text-emerald-700 dark:text-emerald-300">${avgTimeP1}</span>
+           </div>
+         </div>
+         <!-- P2 Avg -->
+         <div class="flex items-center bg-amber-50 dark:bg-amber-900/30 px-5 py-2.5 rounded-lg border border-amber-100 dark:border-amber-800">
+           <i class="fas fa-moon text-amber-500 text-lg mr-3"></i>
+           <div class="flex flex-col">
+             <span class="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider" data-i18n="avgPeriod2">${t("avgPeriod2")}</span>
+             <span class="text-lg font-black text-amber-700 dark:text-amber-300">${avgTimeP2}</span>
+           </div>
          </div>
        </div>
     </div>
@@ -2585,13 +2655,130 @@ fileUpload?.addEventListener("change", (e) => {
 exportExcelBtn?.addEventListener("click", async () => {
   if (!deliveryData || deliveryData.length === 0) return showToast(t("noDataToExport"), "warning");
 
-  // Keep everything except internal _id
-  const out = deliveryData.map((d) => {
-    const { _id, ...rest } = d;
-    return rest;
+  // Define fixed column sequence
+  const exportColumns = [
+    "STATUS",
+    "DELIVERY AT BYD",
+    "CONTAINER",
+    "BL",
+    "LOT",
+    "MODEL",
+    "OPERATION SCOPE",
+    "TRANSPORTATION COMPANY",
+    "VESSEL",
+    "BONDED WAREHOUSE",
+    "DRIVER NAME",
+    "CPF",
+    "TRUCK LICENSE PLATE 1",
+    "TRUCK LICENSE PLATE 2",
+    "TRUCK TYPE",
+    "DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.", // START - YELLOW
+    "DATA E HORARIO DE DESCARGA NA BYD ",
+    "DATA E HORARIO DE ENTREGA CONTAINER VAZIO", // FINISH - GREEN
+    "UNLOAD TIME BYD",
+    "RETURN DEPOT SCHEDULE",
+    "ETA SALVADOR",
+    "PO SAP",
+    "NF",
+    "DEMURRAGE",
+    "SHIP OWNER",
+    "TYPE OF MATERIAL",
+    "CONTAINER COST",
+    "PORT ARRIVAL",
+    "DATA E HORARIO DE CARREGAMENTO (PREVISÃO / JANELA)",
+    "PREVISÃO DATA E HORARIO DE CHEGADA NA BYD",
+    "DEPOT",
+    "REF",
+    "NOTES"
+  ];
+
+  const startIndex = exportColumns.indexOf("DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.");
+  const finishIndex = exportColumns.indexOf("DATA E HORARIO DE ENTREGA CONTAINER VAZIO");
+
+  // Prepare data with correct sequence
+  const dataRows = deliveryData.map((d) => {
+    return exportColumns.map(col => d[col] ?? "");
   });
 
-  const ws = XLSX.utils.json_to_sheet(out);
+  // Create sheet with headers
+  const wsData = [exportColumns, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Apply Styles (if using xlsx-js-style)
+  // Header Style
+  const headerStyle = {
+    fill: { fgColor: { rgb: "CCDAFF" } },
+    font: { bold: true, color: { rgb: "000000" } },
+    alignment: { horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    }
+  };
+
+  const startStyle = {
+    fill: { fgColor: { rgb: "FFFF00" } }, // Yellow
+    font: { bold: true },
+    alignment: { horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    }
+  };
+
+  const finishStyle = {
+    fill: { fgColor: { rgb: "90EE90" } }, // Light Green
+    font: { bold: true },
+    alignment: { horizontal: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    }
+  };
+
+  const range = XLSX.utils.decode_range(ws['!ref'] || "A1");
+
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[cellAddress]) continue;
+
+      // Header row
+      if (R === 0) {
+        ws[cellAddress].s = headerStyle;
+        if (C === startIndex) {
+            ws[cellAddress].s = { ...headerStyle, fill: { fgColor: { rgb: "FFFF00" } } };
+        } else if (C === finishIndex) {
+            ws[cellAddress].s = { ...headerStyle, fill: { fgColor: { rgb: "90EE90" } } };
+        }
+      } else {
+        // Data rows
+        if (C === startIndex) {
+          ws[cellAddress].s = startStyle;
+        } else if (C === finishIndex) {
+          ws[cellAddress].s = finishStyle;
+        } else {
+          // Default data style
+          ws[cellAddress].s = {
+            alignment: { horizontal: "center" },
+            border: {
+              top: { style: "thin", color: { rgb: "DDDDDD" } },
+              bottom: { style: "thin", color: { rgb: "DDDDDD" } },
+              left: { style: "thin", color: { rgb: "DDDDDD" } },
+              right: { style: "thin", color: { rgb: "DDDDDD" } }
+            }
+          };
+        }
+      }
+    }
+  }
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, t("deliveriesTab"));
 
