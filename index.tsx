@@ -53,7 +53,6 @@ try {
   console.warn("Firebase init skipped:", e);
   db = null;
 }
-
 /* ------------------------------- DOM Elements ------------------------------ */
 const fileUpload = document.getElementById("file-upload") as HTMLInputElement;
 const searchInput = document.getElementById("search-input") as HTMLInputElement;
@@ -103,6 +102,8 @@ const translations = {
     uploadSheetButton: "Carregar",
     uploadSheetTooltip: "Carregar Planilha",
     filterBatteryTooltip: "Filtrar Baterias",
+    filterKdTooltip: "Filtrar KD",
+    filterProjectTooltip: "Filtrar Project Cargo",
     exportExcelButton: "Exportar Excel",
     exportPdfButton: "Exportar PDF",
     processing: "Processando...",
@@ -242,6 +243,8 @@ const translations = {
     uploadSheetButton: "Upload",
     uploadSheetTooltip: "Upload Spreadsheet",
     filterBatteryTooltip: "Filter Batteries",
+    filterKdTooltip: "Filter KD",
+    filterProjectTooltip: "Filter Project Cargo",
     exportExcelButton: "Export Excel",
     exportPdfButton: "Export PDF",
     processing: "Processing...",
@@ -380,6 +383,8 @@ const translations = {
     uploadSheetButton: "上传",
     uploadSheetTooltip: "上传电子表格",
     filterBatteryTooltip: "过滤电池",
+    filterKdTooltip: "过滤 KD",
+    filterProjectTooltip: "过滤项目货物 (Project Cargo)",
     exportExcelButton: "导出 Excel",
     exportPdfButton: "导出 PDF",
     processing: "处理中...",
@@ -809,38 +814,57 @@ function safeValue(v: any): any {
 
 function toDateTimeMaybe(v: any): Date | null {
   v = safeValue(v);
-  if (!v) return null;
+  if (v === null || v === undefined || v === "" || v === 0 || v === "0" || v === "-") return null;
   if (v instanceof Date && !isNaN(v.getTime())) return v;
   if (typeof v === "number" && v > 1) {
+    // Excel base date is Dec 30, 1899 for SheetJS numbers
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     if (!isNaN(d.getTime())) {
-      return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+      // Use UTC parts to avoid timezone shift on naive Excel dates
+      return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds());
     }
   }
   if (typeof v === "string") {
     const s = v.trim();
     if (!s) return null;
+    
+    // Try native parsing first (works for ISO and some locales)
     const iso = new Date(s);
-    if (!isNaN(iso.getTime()) && /\d{4}/.test(s)) return iso;
-    // dd/mm/yyyy hh:mm or dd/mm/yyyy
-    const parts = s.split(/[\s-]/);
+    if (!isNaN(iso.getTime()) && s.length > 8 && /\d{4}/.test(s)) return iso;
+
+    // Custom parsing for common Brazilian/International formats: DD/MM/YYYY HH:MM:SS
+    // Handles separators: / - . , and spaces
+    const parts = s.split(/[\s,]+/);
     if (parts.length > 0) {
-      const dateParts = parts[0].split('/');
+      const datePart = parts[0];
+      const timePart = parts[1] || "";
+      const dateParts = datePart.split(/[\/\-\.]/);
+      
       if (dateParts.length === 3) {
-        let h = 0, m = 0;
-        if (parts.length > 1) {
-          const timeParts = parts[1].split(':');
-          if (timeParts.length >= 2) {
-            h = parseInt(timeParts[0], 10);
-            m = parseInt(timeParts[1], 10);
-          }
+        let day = parseInt(dateParts[0], 10);
+        let month = parseInt(dateParts[1], 10);
+        let year = parseInt(dateParts[2], 10);
+        
+        // Handle YYYY/MM/DD
+        if (day > 1000) {
+          const tmp = day; day = year; year = tmp;
         }
-        let a = parseInt(dateParts[0], 10);
-        let b = parseInt(dateParts[1], 10);
-        let c = parseInt(dateParts[2], 10);
-        if (c < 100) c+=2000;
-        if (b > 12 && a <= 12) { const tmp = a; a = b; b = tmp; }
-        const dt = new Date(c, b - 1, a, h, m);
+        if (year < 100) year += 2000;
+        
+        // Basic sanity check on month/day ordering (01..12)
+        if (month > 12 && day <= 12) {
+          const tmp = day; day = month; month = tmp;
+        }
+
+        let h = 0, m = 0, sec = 0;
+        if (timePart) {
+          const timeParts = timePart.split(':');
+          h = parseInt(timeParts[0] || "0", 10);
+          m = parseInt(timeParts[1] || "0", 10);
+          sec = parseInt(timeParts[2] || "0", 10);
+        }
+        
+        const dt = new Date(year, month - 1, day, h, m, sec);
         return isNaN(dt.getTime()) ? null : dt;
       }
     }
@@ -981,6 +1005,35 @@ function resetUI() {
   if (lastUpdate) lastUpdate.textContent = t("uploadPrompt");
 }
 
+function isBatteryRow(row: any): boolean {
+  const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
+  const mod = normalizeText(row["MODEL"] || "");
+  const rat = normalizeText(row["RATIONALIZATION"] || "");
+  const searchStr = `${mt} ${mod} ${rat}`;
+  return searchStr.includes("BATTERY") || searchStr.includes("BATERIA");
+}
+
+function isKdRow(row: any): boolean {
+  const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
+  const mod = normalizeText(row["MODEL"] || "");
+  const rat = normalizeText(row["RATIONALIZATION"] || "");
+  const searchStr = `${mt} ${mod} ${rat}`;
+  // Broad match for KD, includes SKD and CKD
+  return searchStr.includes("KD") || searchStr.includes("CKD") || searchStr.includes("SKD");
+}
+
+function isProjectRow(row: any): boolean {
+  const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
+  const mod = normalizeText(row["MODEL"] || "");
+  const rat = normalizeText(row["RATIONALIZATION"] || "");
+  const searchStr = `${mt} ${mod} ${rat}`;
+  
+  // Project cargo is often identified as "PROJECT" or "PC" or "PROJETO"
+  // If it's NOT battery and NOT KD, it's often considered project cargo in this specific dashboard context
+  const hasProjectKeywords = searchStr.includes("PROJECT") || searchStr.includes("PROJETO") || searchStr.includes("GENERAL CARGO");
+  return hasProjectKeywords || (!isBatteryRow(row) && !isKdRow(row));
+}
+
 function applyFiltersAndRender(activeTabId: string | null = null) {
   if (!activeTabId) {
     const activeTab = deliveryTabs?.querySelector(".tab-btn.active");
@@ -991,24 +1044,15 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   let filteredData = deliveryData;
 
   if (showOnlyBattery) {
-    filteredData = filteredData.filter((row) => {
-      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-      return materialType.includes("BATTERY") || materialType.includes("BATERIA");
-    });
+    filteredData = filteredData.filter(row => isBatteryRow(row));
   }
 
   if (showOnlyKd) {
-    filteredData = filteredData.filter((row) => {
-      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-      return materialType.includes("KD");
-    });
+    filteredData = filteredData.filter(row => isKdRow(row));
   }
 
   if (showOnlyProject) {
-    filteredData = filteredData.filter((row) => {
-      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-      return !materialType.includes("BATTERY") && !materialType.includes("BATERIA") && !materialType.includes("KD");
-    });
+    filteredData = filteredData.filter(row => isProjectRow(row));
   }
 
   if (activeStatusFilter) {
@@ -1048,22 +1092,13 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
 function updateStats() {
   let dataForStats = deliveryData;
   if (showOnlyBattery) {
-    dataForStats = dataForStats.filter((row) => {
-      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-      return materialType.includes("BATTERY") || materialType.includes("BATERIA");
-    });
+    dataForStats = dataForStats.filter(row => isBatteryRow(row));
   }
   if (showOnlyKd) {
-    dataForStats = dataForStats.filter((row) => {
-      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-      return materialType.includes("KD");
-    });
+    dataForStats = dataForStats.filter(row => isKdRow(row));
   }
   if (showOnlyProject) {
-    dataForStats = dataForStats.filter((row) => {
-      const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-      return !materialType.includes("BATTERY") && !materialType.includes("BATERIA") && !materialType.includes("KD");
-    });
+    dataForStats = dataForStats.filter(row => isProjectRow(row));
   }
 
   const total = dataForStats.length;
@@ -1376,9 +1411,8 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
             ${deliveries
               .map((row, rowIndex) => {
                 const status = normalizeText(row["STATUS"] || "PENDENTE") || "PENDENTE";
-                const materialType = normalizeText(row["TYPE OF MATERIAL"] || "");
-                const isBattery = materialType.includes("BATTERY") || materialType.includes("BATERIA");
-                const isKd = materialType.includes("KD");
+                const isBattery = isBatteryRow(row);
+                const isKd = isKdRow(row);
                 const rowClass = `transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer ${
                   isBattery ? "is-battery" : ""
                 } ${isKd ? "is-kd" : ""} ${status === "ENTREGUE" ? "bg-green-100 dark:bg-green-900/30" : status === "CANCELADO" ? "bg-red-100 dark:bg-red-900/30" : ""}`;
@@ -1732,20 +1766,18 @@ function renderCharts(data: DeliveryRow[]) {
     "ENTREGUE": "#22c55e",
     "A CAMINHO": "#3b82f6",
     "AGUARDANDO DESOVA": "#eab308",
-    "BACKLOG": "#f97316",
     "PENDENTE": "#64748b",
     "OUTROS": "#ef4444"
   };
 
-  const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), "Backlog", t("pending"), t("chartsOther")];
+  const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), t("pending"), t("chartsOther")];
   
   function getStatusIndex(s: string) {
     if (s === "ENTREGUE") return 0;
     if (s === "A CAMINHO") return 1;
     if (s === "AGUARDANDO DESOVA") return 2;
-    if (s === "BACKLOG") return 3;
-    if (s === "PENDENTE") return 4;
-    return 5;
+    if (s === "PENDENTE") return 3;
+    return 4;
   }
 
   const customLegendHTML = `
@@ -1762,7 +1794,7 @@ function renderCharts(data: DeliveryRow[]) {
     </div>
   `;
 
-  let overallCounts = [0, 0, 0, 0, 0, 0];
+  let overallCounts = [0, 0, 0, 0, 0];
   data.forEach((row) => {
     let s = normalizeText(row["STATUS"] || "PENDENTE");
     overallCounts[getStatusIndex(s)]++;
@@ -1814,6 +1846,16 @@ function renderCharts(data: DeliveryRow[]) {
                 <canvas id="lotChartCanvas"></canvas>
              </div>
           </div>
+          ${isMacroView ? `
+            <div class="mt-4 flex flex-wrap justify-center gap-4 border-t border-slate-100 dark:border-slate-700 pt-4">
+              ${statusLabels.map((lbl, idx) => `
+                <div class="flex items-center text-[10px] font-bold text-slate-500">
+                  <span class="w-3 h-3 rounded-sm mr-2" style="background-color: ${Object.values(statusColors)[idx]}"></span>
+                  ${lbl}
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
 
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-2 xl:col-span-1">
@@ -1887,7 +1929,7 @@ function renderCharts(data: DeliveryRow[]) {
   const lotStats: Record<string, { total: number; done: number; statusCounts: number[]; carriers: Set<string>; operations: Set<string> }> = {};
   data.forEach((row) => {
     const lot = String(row["LOT"] || "N/A");
-    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, statusCounts: [0,0,0,0,0,0], carriers: new Set(), operations: new Set() };
+    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, statusCounts: [0,0,0,0,0], carriers: new Set(), operations: new Set() };
     lotStats[lot].total++;
     const status = normalizeText(row["STATUS"] || "PENDENTE");
     if (status === "ENTREGUE") lotStats[lot].done++;
@@ -1918,7 +1960,7 @@ function renderCharts(data: DeliveryRow[]) {
         datasets: statusLabels.map((lbl, idx) => ({
           label: lbl,
           data: sortedLots.map(lot => lotStats[lot].statusCounts[idx]),
-          backgroundColor: Object.values(statusColors)[idx],
+          backgroundColor: Object.values(statusColors)[idx]
         }))
       };
       chartOptions = {
@@ -1931,7 +1973,32 @@ function renderCharts(data: DeliveryRow[]) {
         plugins: {
           legend: { display: false },
           datalabels: {
+            color: '#fff',
+            font: { weight: 'bold', size: 10 },
             formatter: (value: number) => value > 0 ? value : ''
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            titleFont: { size: 14, weight: 'bold' },
+            padding: 12,
+            cornerRadius: 8,
+            callbacks: {
+              title: (items: any) => {
+                return items[0].label;
+              },
+              afterBody: (items: any) => {
+                const lot = items[0].label;
+                const stats = lotStats[lot];
+                const carriers = Array.from(stats.carriers || []).join(", ") || "N/A";
+                const ops = Array.from(stats.operations || []).join(", ") || "N/A";
+                return `\nTransportadora: ${carriers}\nEscopo da Operação: ${ops}`;
+              },
+              label: (item: any) => {
+                return ` ${item.dataset.label}: ${item.parsed.y}`;
+              }
+            }
           }
         }
       };
@@ -1991,7 +2058,7 @@ function renderCharts(data: DeliveryRow[]) {
   const carrierStats: Record<string, number[]> = {};
   data.forEach((row) => {
     const carrier = String(row["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase() || "N/A";
-    if (!carrierStats[carrier]) carrierStats[carrier] = [0, 0, 0, 0, 0, 0];
+    if (!carrierStats[carrier]) carrierStats[carrier] = [0, 0, 0, 0, 0];
     carrierStats[carrier][getStatusIndex(normalizeText(row["STATUS"] || "PENDENTE"))]++;
   });
 
@@ -2025,7 +2092,7 @@ function renderCharts(data: DeliveryRow[]) {
   const warehouseStats: Record<string, number[]> = {};
   data.forEach((row) => {
     const wh = String(row["BONDED WAREHOUSE"] || "N/A").trim().toUpperCase() || "N/A";
-    if (!warehouseStats[wh]) warehouseStats[wh] = [0, 0, 0, 0, 0, 0];
+    if (!warehouseStats[wh]) warehouseStats[wh] = [0, 0, 0, 0, 0];
     warehouseStats[wh][getStatusIndex(normalizeText(row["STATUS"] || "PENDENTE"))]++;
   });
 
@@ -2426,18 +2493,19 @@ function renderTimeTable(data: DeliveryRow[]) {
   let totalTimeSumP2 = 0, validRecordsP2 = 0;
 
   const rowsHtml = data.map((row) => {
-    const startDt = toDateTimeMaybe(row["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]);
-    let endDt = toDateTimeMaybe(row["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA NA BYD "]);
-    let fullTimeString = "-", durationHours = 0;
+    const startDt = toDateTimeMaybe(row["TERMINAL - INÍCIO DE ROTA"]);
+    let endDt = toDateTimeMaybe(row["ENTREGA VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA"]);
+    let fullTimeString = "-";
+    let durationHours = 0;
 
     if (startDt && endDt) {
       const diffMs = endDt.getTime() - startDt.getTime();
-      if (diffMs > 0) {
-        durationHours = diffMs / (1000 * 60 * 60);
+      if (diffMs > -3600000) { // Small threshold for slight negative values due to clock drift
+        durationHours = Math.max(0, diffMs / (1000 * 60 * 60));
         const dDays = Math.floor(durationHours / 24);
         const dHours = Math.floor(durationHours % 24);
         const dMins = Math.round((durationHours - Math.floor(durationHours)) * 60);
-        fullTimeString = dDays > 0 ? `${dDays}d ${dHours}h ${dMins}m` : `${dHours}h ${dMins}m`;
+        fullTimeString = dDays > 0 ? `${dDays}v ${dHours}h ${dMins}m` : `${dHours}h ${dMins}m`;
 
         totalTimeSum += durationHours; validRecords++;
         const timeVal = startDt.getHours() * 100 + startDt.getMinutes();
@@ -2461,7 +2529,7 @@ function renderTimeTable(data: DeliveryRow[]) {
     if (count === 0) return "-";
     const avgH = sum / count;
     const aDays = Math.floor(avgH / 24), aHours = Math.floor(avgH % 24), aMins = Math.round((avgH - Math.floor(avgH)) * 60);
-    return aDays > 0 ? `${aDays}d ${aHours}h ${aMins}m` : `${aHours}h ${aMins}m`;
+    return aDays > 0 ? `${aDays}v ${aHours}h ${aMins}m` : `${aHours}h ${aMins}m`;
   };
 
   timeContent.innerHTML = `
@@ -2486,7 +2554,20 @@ function renderTimeTable(data: DeliveryRow[]) {
        </div>
     </div>
     <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-h-[400px]">
-      <table class="w-full text-xs text-left"><tbody class="divide-y">${rowsHtml}</tbody></table>
+      <table class="w-full text-xs text-left">
+        <thead class="bg-slate-50 dark:bg-slate-700 sticky top-0">
+          <tr>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">Container</th>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">BL</th>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">Carrier</th>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">Lot</th>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">Start (Terminal)</th>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">Finish (BYD/Empty)</th>
+            <th class="px-4 py-2 font-bold uppercase text-slate-500">Duration</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">${rowsHtml}</tbody>
+      </table>
     </div>
   `;
 }
@@ -2527,21 +2608,33 @@ fileUpload?.addEventListener("change", (e) => {
       const headerIndex = buildHeaderIndex(headers);
 
       const col = {
-        DELIVERY_AT_BYD: pickIndex(headerIndex, ["DELIVERY AT BYD", "DELIVERY", "DATA DE ENTREGA"]),
-        UNLOAD_TIME_BYD: pickIndex(headerIndex, ["UNLOAD TIME BYD", "UNLOAD TIME"]),
-        TRANSPORTATION_COMPANY: pickIndex(headerIndex, ["TRANSPORTATION COMPANY", "CARRIER", "TRANSPORTADORA"]),
-        CONTAINER: pickIndex(headerIndex, ["CONTAINER"]),
-        BL: pickIndex(headerIndex, ["BL", "B/L"]),
-        VESSEL: pickIndex(headerIndex, ["VESSEL", "NAVIO"]),
-        BONDED_WAREHOUSE: pickIndex(headerIndex, ["BONDED WAREHOUSE", "ARMAZEM"]),
+        DELIVERY_AT_BYD: pickIndex(headerIndex, ["DELIVERY AT BYD", "DELIVERY AT", "DELIVERY", "DATA DE ENTREGA", "ENTREGA"]),
+        UNLOAD_TIME_BYD: pickIndex(headerIndex, ["UNLOAD TIME BYD", "UNLOAD TIME", "TEMPO DESCARGA"]),
+        TRANSPORTATION_COMPANY: pickIndex(headerIndex, ["TRANSPORTATION COMPANY", "CARRIER", "TRANSPORTADORA", "TRANSPORTADOR"]),
+        CONTAINER: pickIndex(headerIndex, ["CONTAINER", "CNTR"]),
+        BL: pickIndex(headerIndex, ["BL", "B/L", "BL NUMBER"]),
+        VESSEL: pickIndex(headerIndex, ["VESSEL", "NAVIO", "NAVIO/VIAGEM"]),
+        BONDED_WAREHOUSE: pickIndex(headerIndex, ["BONDED WAREHOUSE", "ARMAZEM", "RECINTO", "WAREHOUSE"]),
         MODEL: pickIndex(headerIndex, ["MODEL", "MODELO"]),
+        RATIONALIZATION: pickIndex(headerIndex, ["RATIONALIZATION", "RATIONALIZACAO", "RACIONALIZACAO"]),
         LOT: pickIndex(headerIndex, ["LOT", "LOTE"]),
-        TYPE_OF_MATERIAL: pickIndex(headerIndex, ["TYPE OF MATERIAL", "MATERIAL"]),
+        DRIVER_NAME: pickIndex(headerIndex, ["DRIVER NAME", "MOTORISTA"]),
+        CPF: pickIndex(headerIndex, ["CPF"]),
+        PLATE1: pickIndex(headerIndex, ["LICENSE P (Plate 1)", "PLACA 1", "PLATE 1"]),
+        PLATE2: pickIndex(headerIndex, ["LICENSE P (Plate 2)", "PLACA 2", "PLATE 2"]),
+        TRUCK_TYPE: pickIndex(headerIndex, ["TRUCK TYPE", "TIPO CAMINHAO", "TIPO"]),
+        LOAD_TIME: pickIndex(headerIndex, ["LOAD TIME", "TEMPO CARGA"]),
+        DEPOT_SCA: pickIndex(headerIndex, ["DEPOT SCA"]),
+        SALVADOR: pickIndex(headerIndex, ["SALVADOR"]),
+        PO_SAP: pickIndex(headerIndex, ["PO SAP", "PO"]),
+        NF: pickIndex(headerIndex, ["NF", "NOTA FISCAL", "NFE"]),
+        EMISSION_NF: pickIndex(headerIndex, ["EMISSÃO NF", "EMISSAO NF", "DATA NF"]),
+        TYPE_OF_MATERIAL: pickIndex(headerIndex, ["TYPE OF MATERIAL", "MATERIAL", "TIPO DE MATERIAL", "TIPO", "MATERIAL TYPE"]),
         STATUS: pickIndex(headerIndex, ["STATUS", "SITUACAO"]),
-        TERMINAL_DEPARTURE: pickIndex(headerIndex, ["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."]),
-        EMPTY_DELIVERED: pickIndex(headerIndex, ["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"]),
-        UNLOAD_AT_BYD: pickIndex(headerIndex, ["DATA E HORARIO DE DESCARGA NA BYD "]),
-        NOTES: pickIndex(headerIndex, ["NOTES", "OBSERVACOES", "OBSERVAÇÕES"]),
+        TERMINAL_DEPARTURE: pickIndex(headerIndex, ["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.", "TERMINAL - INICIO", "TERMINAL - INÍCIO", "SAÍDA TERMINAL", "TERMINAL - INÍCIO DE ROTA", "TERMINAL - INICIO DE ROTA"]),
+        EMPTY_DELIVERED: pickIndex(headerIndex, ["DATA E HORARIO DE ENTREGA CONTAINER VAZIO", "ENTREGA VAZIO", "ENTREGA CONTAINER VAZIO", "DATA DEVOLUCAO VAZIO"]),
+        UNLOAD_AT_BYD: pickIndex(headerIndex, ["DATA E HORARIO DE DESCARGA NA BYD ", "DESCARGA BYD", "DESCARGA", "DATA E HORARIO DE DESCARGA"]),
+        NOTES: pickIndex(headerIndex, ["NOTES", "OBSERVACOES", "OBSERVAÇÕES", "OBS"]),
       };
 
       deliveryData = rawData.slice(hRow + 1).filter(r => safeValue(r[col.CONTAINER]) || safeValue(r[col.BL])).map((r) => {
@@ -2556,11 +2649,23 @@ fileUpload?.addEventListener("change", (e) => {
         obj["VESSEL"] = col.VESSEL >= 0 ? safeValue(r[col.VESSEL]) : "";
         obj["BONDED WAREHOUSE"] = col.BONDED_WAREHOUSE >= 0 ? safeValue(r[col.BONDED_WAREHOUSE]) : "";
         obj["MODEL"] = col.MODEL >= 0 ? safeValue(r[col.MODEL]) : "";
+        obj["RATIONALIZATION"] = col.RATIONALIZATION >= 0 ? safeValue(r[col.RATIONALIZATION]) : "";
         obj["LOT"] = col.LOT >= 0 ? safeValue(r[col.LOT]) : "";
+        obj["DRIVER NAME"] = col.DRIVER_NAME >= 0 ? safeValue(r[col.DRIVER_NAME]) : "";
+        obj["CPF"] = col.CPF >= 0 ? safeValue(r[col.CPF]) : "";
+        obj["LICENSE P (Plate 1)"] = col.PLATE1 >= 0 ? safeValue(r[col.PLATE1]) : "";
+        obj["LICENSE P (Plate 2)"] = col.PLATE2 >= 0 ? safeValue(r[col.PLATE2]) : "";
+        obj["TRUCK TYPE"] = col.TRUCK_TYPE >= 0 ? safeValue(r[col.TRUCK_TYPE]) : "";
+        obj["LOAD TIME"] = col.LOAD_TIME >= 0 ? safeValue(r[col.LOAD_TIME]) : "";
+        obj["DEPOT SCA"] = col.DEPOT_SCA >= 0 ? safeValue(r[col.DEPOT_SCA]) : "";
+        obj["SALVADOR"] = col.SALVADOR >= 0 ? safeValue(r[col.SALVADOR]) : "";
+        obj["PO SAP"] = col.PO_SAP >= 0 ? safeValue(r[col.PO_SAP]) : "";
+        obj["NF"] = col.NF >= 0 ? safeValue(r[col.NF]) : "";
+        obj["EMISSÃO NF"] = col.EMISSION_NF >= 0 ? safeValue(r[col.EMISSION_NF]) : "";
         obj["TYPE OF MATERIAL"] = col.TYPE_OF_MATERIAL >= 0 ? safeValue(r[col.TYPE_OF_MATERIAL]) : "";
-        obj["DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA."] = col.TERMINAL_DEPARTURE >= 0 ? safeValue(r[col.TERMINAL_DEPARTURE]) : "";
-        obj["DATA E HORARIO DE ENTREGA CONTAINER VAZIO"] = col.EMPTY_DELIVERED >= 0 ? safeValue(r[col.EMPTY_DELIVERED]) : "";
-        obj["DATA E HORARIO DE DESCARGA NA BYD "] = col.UNLOAD_AT_BYD >= 0 ? safeValue(r[col.UNLOAD_AT_BYD]) : "";
+        obj["TERMINAL - INÍCIO DE ROTA"] = col.TERMINAL_DEPARTURE >= 0 ? safeValue(r[col.TERMINAL_DEPARTURE]) : "";
+        obj["ENTREGA VAZIO"] = col.EMPTY_DELIVERED >= 0 ? safeValue(r[col.EMPTY_DELIVERED]) : "";
+        obj["DATA E HORARIO DE DESCARGA"] = col.UNLOAD_AT_BYD >= 0 ? safeValue(r[col.UNLOAD_AT_BYD]) : "";
         obj["NOTES"] = col.NOTES >= 0 ? safeValue(r[col.NOTES]) : "";
         obj["STATUS"] = sanitizeStatus(col.STATUS >= 0 ? safeValue(r[col.STATUS]) : "");
         obj._id = makeRowId(obj);
@@ -2588,27 +2693,171 @@ exportExcelBtn?.addEventListener("click", async () => {
   if (!deliveryData || deliveryData.length === 0) return showToast(t("noDataToExport"), "warning");
 
   const exportColumns = [
-    "STATUS", "DELIVERY AT BYD", "CONTAINER", "BL", "LOT", "MODEL", "OPERATION SCOPE", "TRANSPORTATION COMPANY", 
-    "VESSEL", "BONDED WAREHOUSE", "DATA E HORRÁRIO DA SAÍDA DO TERMINAL - INICIO DA ROTA NA PISTA EXPRESSA.", 
-    "DATA E HORARIO DE DESCARGA NA BYD ", "DATA E HORARIO DE ENTREGA CONTAINER VAZIO", "UNLOAD TIME BYD", "NOTES"
+    "STATUS", "DELIVERY AT BYD", "CONTAINER", "BL", "LOT", "MODEL", "RATIONALIZATION", "TRANSPORTATION COMPANY", 
+    "VESSEL", "BONDED WAREHOUSE", "DRIVER NAME", "CPF", "LICENSE P (Plate 1)", "LICENSE P (Plate 2)", "TRUCK TYPE",
+    "TERMINAL - INÍCIO DE ROTA", 
+    "DATA E HORARIO DE DESCARGA", 
+    "ENTREGA VAZIO", 
+    "TIME OF OPERATION",
+    "LOAD TIME", "DEPOT SCA", "SALVADOR", "PO SAP", "NF", "EMISSÃO NF", "NOTES"
   ];
 
-  const ws = XLSX.utils.aoa_to_sheet([exportColumns, ...deliveryData.map(d => exportColumns.map(col => d[col] ?? ""))]);
+  // Create Title Row
+  const aoa = [
+    ["KD Monitor Dashboard - Supervisors View"],
+    [], // Empty row
+    exportColumns // Header row at index 2
+  ];
+
+  deliveryData.forEach(d => {
+    // Calculate Time of Operation column
+    const startDt = toDateTimeMaybe(d["TERMINAL - INÍCIO DE ROTA"]);
+    const endDt = toDateTimeMaybe(d["ENTREGA VAZIO"]) || toDateTimeMaybe(d["DATA E HORARIO DE DESCARGA"]);
+    let timeOfOp = "-";
+    if (startDt && endDt) {
+      const diffMs = endDt.getTime() - startDt.getTime();
+      if (diffMs > -3600000) {
+        const durationHours = Math.max(0, diffMs / (1000 * 60 * 60));
+        const dDays = Math.floor(durationHours / 24);
+        const dHours = Math.floor(durationHours % 24);
+        const dMins = Math.round((durationHours - Math.floor(durationHours)) * 60);
+        timeOfOp = dDays > 0 ? `${dDays}v ${dHours}h ${dMins}m` : `${dHours}h ${dMins}m`;
+      }
+    }
+
+    const rowData = exportColumns.map(col => {
+      if (col === "TIME OF OPERATION") return timeOfOp;
+      return d[col] ?? "";
+    });
+    aoa.push(rowData);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Styling
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  
+  // Style Header Row (index 2)
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cellRef = XLSX.utils.encode_cell({ r: 2, c });
+    if (!ws[cellRef]) continue;
+    ws[cellRef].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "4472C4" } },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+  }
+
+  // Style Title (Row 0)
+  const titleCell = XLSX.utils.encode_cell({ r: 0, c: 0 });
+  if (ws[titleCell]) {
+    ws[titleCell].s = {
+      font: { bold: true, size: 16, color: { rgb: "4472C4" } },
+      alignment: { horizontal: "left" }
+    };
+  }
+
+  // Find column indices for Start and Finish
+  const startColIdx = exportColumns.indexOf("TERMINAL - INÍCIO DE ROTA");
+  const finishColIdx = exportColumns.indexOf("ENTREGA VAZIO");
+  const durationColIdx = exportColumns.indexOf("TIME OF OPERATION");
+
+  // Apply colors and borders to data rows (starting from row 3)
+  for (let r = 3; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      if (!ws[cellRef]) ws[cellRef] = { v: "", t: "s" };
+      if (!ws[cellRef].s) ws[cellRef].s = {};
+      
+      // Default common style: thin border for all data cells
+      ws[cellRef].s.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" }
+      };
+
+      // Start Time (Yellow)
+      if (c === startColIdx) {
+        ws[cellRef].s.fill = { fgColor: { rgb: "FFFF00" } };
+        ws[cellRef].s.alignment = { horizontal: "center" };
+      }
+      // Finish Time (Green)
+      else if (c === finishColIdx) {
+        ws[cellRef].s.fill = { fgColor: { rgb: "92D050" } };
+        ws[cellRef].s.font = { color: { rgb: "000000" } };
+        ws[cellRef].s.alignment = { horizontal: "center" };
+      }
+      // Duration (Bold + formatting)
+      else if (c === durationColIdx) {
+        ws[cellRef].s.font = { bold: true };
+        ws[cellRef].s.alignment = { horizontal: "center" };
+      }
+    }
+  }
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, t("deliveriesTab"));
 
-  // Append Standardized Minutes layout style logic inside spreadsheet generation
+  // [rest of tab additions...]
+
+  // Tab 2: Arrivals per Lot
   try {
     const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
     const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
     
-    const arrivalsOut = lotsFromData.map((lot) => {
+    const arrivalsAOA = [
+      ["Lote / Modelo", ...statuses]
+    ];
+
+    lotsFromData.forEach((lot) => {
       const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
-      const row: any = { "Lote / Modelo": lot };
-      statuses.forEach(s => row[s] = deliveriesInLot.filter(d => normalizeText(d["STATUS"] || "") === normalizeText(s)).length || "");
-      return row;
+      const row = [lot];
+      statuses.forEach(s => {
+        const count = deliveriesInLot.filter(d => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
+        row.push(count || 0);
+      });
+      arrivalsAOA.push(row);
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(arrivalsOut), t("arrivalsTab"));
+
+    // Add Overall Total row
+    const totalsRow = ["Overall Total"];
+    statuses.forEach((s, idx) => {
+      const total = arrivalsAOA.slice(1).reduce((acc, row) => acc + (row[idx + 1] as number), 0);
+      totalsRow.push(total);
+    });
+    arrivalsAOA.push(totalsRow);
+
+    const arrivalsWs = XLSX.utils.aoa_to_sheet(arrivalsAOA);
+    
+    // Style Tab 2: Arrivals per Lot
+    const arrivalsRange = XLSX.utils.decode_range(arrivalsWs['!ref'] || 'A1');
+    for(let r = arrivalsRange.s.r; r <= arrivalsRange.e.r; r++) {
+      for(let c = arrivalsRange.s.c; c <= arrivalsRange.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({r, c});
+        if(!arrivalsWs[cellRef]) arrivalsWs[cellRef] = { v: "", t: "s" };
+        if(!arrivalsWs[cellRef].s) arrivalsWs[cellRef].s = {};
+        
+        // Borders for all
+        arrivalsWs[cellRef].s.border = {
+          top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" }
+        };
+
+        // Header Style
+        if(r === 0) {
+          arrivalsWs[cellRef].s.font = { bold: true, color: { rgb: "FFFFFF" } };
+          arrivalsWs[cellRef].s.fill = { fgColor: { rgb: "4472C4" } };
+          arrivalsWs[cellRef].s.alignment = { horizontal: "center" };
+        }
+        // Total Row Style
+        if(r === arrivalsAOA.length - 1) {
+          arrivalsWs[cellRef].s.font = { bold: true };
+          arrivalsWs[cellRef].s.fill = { fgColor: { rgb: "D9D9D9" } };
+        }
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, arrivalsWs, t("arrivalsTab"));
   } catch(e) { console.error(e); }
 
   // Append Inventory tab data to master excel file seamlessly
@@ -2621,7 +2870,27 @@ exportExcelBtn?.addEventListener("click", async () => {
           inventoryRows.push([sec.title, loc.name, loc.empty, loc.full, (loc.empty + loc.full), loc.capacity]);
         });
       });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inventoryRows), t("inventoryTab"));
+      const inventoryWs = XLSX.utils.aoa_to_sheet(inventoryRows);
+      const invRange = XLSX.utils.decode_range(inventoryWs['!ref'] || 'A1');
+      
+      for(let r = invRange.s.r; r <= invRange.e.r; r++) {
+        for(let c = invRange.s.c; c <= invRange.e.c; c++) {
+          const cellRef = XLSX.utils.encode_cell({r, c});
+          if(!inventoryWs[cellRef]) inventoryWs[cellRef] = { v: "", t: "s" };
+          if(!inventoryWs[cellRef].s) inventoryWs[cellRef].s = {};
+          
+          inventoryWs[cellRef].s.border = {
+            top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" }
+          };
+
+          if(r === 0) {
+            inventoryWs[cellRef].s.font = { bold: true, color: { rgb: "FFFFFF" } };
+            inventoryWs[cellRef].s.fill = { fgColor: { rgb: "4472C4" } };
+            inventoryWs[cellRef].s.alignment = { horizontal: "center" };
+          }
+        }
+      }
+      XLSX.utils.book_append_sheet(wb, inventoryWs, t("inventoryTab"));
     }
   } catch (e) { console.error(e); }
 
