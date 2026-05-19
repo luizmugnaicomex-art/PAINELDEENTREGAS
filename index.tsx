@@ -2564,7 +2564,11 @@ function renderTimeTable(data: DeliveryRow[]) {
 
   const scheduled = deliveryData.filter(d => normalizeText(d["STATUS"] || "") !== "CANCELADO").length;
   const delivered = deliveryData.filter(d => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
-  const remaining = Math.max(0, scheduled - delivered);
+  const remaining = deliveryData.filter(d => {
+    const s = normalizeText(d["STATUS"] || "");
+    return s === "PENDENTE" || s === "AGUARDANDO DESOVA" || s === "A CAMINHO";
+  }).length;
+
   const avgHours = validRecords > 0 ? totalTimeSum / validRecords : 0;
   const hoursNeeded = remaining * avgHours;
 
