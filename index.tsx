@@ -53,6 +53,7 @@ try {
   console.warn("Firebase init skipped:", e);
   db = null;
 }
+
 /* ------------------------------- DOM Elements ------------------------------ */
 const fileUpload = document.getElementById("file-upload") as HTMLInputElement;
 const searchInput = document.getElementById("search-input") as HTMLInputElement;
@@ -141,6 +142,7 @@ const translations = {
     pending: "Pendentes",
     canceled: "Cancelados",
     awaitingUnload: "Aguardando Desova",
+    statusBacklog: "Backlog",
     noResultsTitle: "Nenhum resultado encontrado",
     noResultsMessage: "Nenhum resultado encontrado para os filtros aplicados.",
     containersDelivered: (delivered: number, total: number) => `${delivered} de ${total} containers entregues`,
@@ -282,6 +284,7 @@ const translations = {
     pending: "Pending",
     canceled: "Canceled",
     awaitingUnload: "Awaiting Unload",
+    statusBacklog: "Backlog",
     noResultsTitle: "No results found",
     noResultsMessage: "No results found for the applied filters.",
     containersDelivered: (delivered: number, total: number) => `${delivered} of ${total} containers delivered`,
@@ -422,6 +425,7 @@ const translations = {
     pending: "待处理",
     canceled: "已取消",
     awaitingUnload: "等待卸货",
+    statusBacklog: "积压 (Backlog)",
     noResultsTitle: "未找到结果",
     noResultsMessage: "未找到符合所应用筛选条件的结果。",
     containersDelivered: (delivered: number, total: number) => `${total} 个集装箱中已交付 ${delivered} 个`,
@@ -1014,12 +1018,22 @@ function isBatteryRow(row: any): boolean {
 }
 
 function isKdRow(row: any): boolean {
+  // Disjoint: if it's already identified as battery, it's not in the KD bucket for filtering
+  if (isBatteryRow(row)) return false;
+
   const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
   const mod = normalizeText(row["MODEL"] || "");
   const rat = normalizeText(row["RATIONALIZATION"] || "");
   const searchStr = `${mt} ${mod} ${rat}`;
-  // Broad match for KD, includes SKD and CKD
-  return searchStr.includes("KD") || searchStr.includes("CKD") || searchStr.includes("SKD");
+  
+  // High priority: Material type explicitly says KD/SKD/CKD
+  if (mt.includes("KD") || mt.includes("CKD") || mt.includes("SKD")) return true;
+  
+  // Secondary: Model indicates it's an assembly kit
+  const isAssembly = mod.includes("BIG ASSEMBLY") || rat.includes("BIG ASSEMBLY");
+  const hasKdKeyword = mod.includes("KD") || mod.includes("SKD") || mod.includes("CKD");
+  
+  return isAssembly || hasKdKeyword;
 }
 
 function isProjectRow(row: any): boolean {
@@ -1028,10 +1042,12 @@ function isProjectRow(row: any): boolean {
   const rat = normalizeText(row["RATIONALIZATION"] || "");
   const searchStr = `${mt} ${mod} ${rat}`;
   
-  // Project cargo is often identified as "PROJECT" or "PC" or "PROJETO"
-  // If it's NOT battery and NOT KD, it's often considered project cargo in this specific dashboard context
+  // If it's explicitly project cargo keywords
   const hasProjectKeywords = searchStr.includes("PROJECT") || searchStr.includes("PROJETO") || searchStr.includes("GENERAL CARGO");
-  return hasProjectKeywords || (!isBatteryRow(row) && !isKdRow(row));
+  if (hasProjectKeywords) return true;
+
+  // Disjoint: If it's not battery and not KD, it's Project Cargo (PC)
+  return !isBatteryRow(row) && !isKdRow(row);
 }
 
 function applyFiltersAndRender(activeTabId: string | null = null) {
@@ -1415,7 +1431,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                 const isKd = isKdRow(row);
                 const rowClass = `transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer ${
                   isBattery ? "is-battery" : ""
-                } ${isKd ? "is-kd" : ""} ${status === "ENTREGUE" ? "bg-green-100 dark:bg-green-900/30" : status === "CANCELADO" ? "bg-red-100 dark:bg-red-900/30" : ""}`;
+                } ${isKd ? "is-kd" : ""} ${status === "ENTREGUE" ? "bg-green-100 dark:bg-green-900/30" : status === "CANCELADO" ? "bg-red-100 dark:bg-red-900/30" : status === "BACKLOG" ? "bg-orange-100 dark:bg-orange-900/30" : ""}`;
 
                 const plate = String(row["TRUCK LICENSE PLATE 1"] || row["PLATE"] || "").trim();
 
@@ -1694,30 +1710,46 @@ lotSearchInput?.addEventListener("input", () => {
   searchDebounceTimer = window.setTimeout(applyFiltersAndRender, 250);
 });
 
+function resetCategoryButtonsUI() {
+  [batteryFilterBtn, kdFilterBtn, projectFilterBtn].forEach(btn => {
+    if (!btn) return;
+    btn.classList.remove("ring-2", "ring-amber-500", "ring-blue-500", "ring-purple-500", "bg-amber-50", "bg-blue-50", "bg-purple-50", "dark:bg-amber-900/30", "dark:bg-blue-900/30", "dark:bg-purple-900/30");
+  });
+}
+
 batteryFilterBtn?.addEventListener("click", () => {
-  showOnlyBattery = !showOnlyBattery;
-  batteryFilterBtn.classList.toggle("ring-2", showOnlyBattery);
-  batteryFilterBtn.classList.toggle("ring-amber-500", showOnlyBattery);
-  batteryFilterBtn.classList.toggle("bg-amber-50", showOnlyBattery);
-  batteryFilterBtn.classList.toggle("dark:bg-amber-900/30", showOnlyBattery);
+  const targetState = !showOnlyBattery;
+  showOnlyBattery = false; showOnlyKd = false; showOnlyProject = false;
+  showOnlyBattery = targetState;
+  
+  resetCategoryButtonsUI();
+  if (showOnlyBattery) {
+    batteryFilterBtn.classList.add("ring-2", "ring-amber-500", "bg-amber-50", "dark:bg-amber-900/30");
+  }
   applyFiltersAndRender();
 });
 
 kdFilterBtn?.addEventListener("click", () => {
-  showOnlyKd = !showOnlyKd;
-  kdFilterBtn.classList.toggle("ring-2", showOnlyKd);
-  kdFilterBtn.classList.toggle("ring-blue-500", showOnlyKd);
-  kdFilterBtn.classList.toggle("bg-blue-50", showOnlyKd);
-  kdFilterBtn.classList.toggle("dark:bg-blue-900/30", showOnlyKd);
+  const targetState = !showOnlyKd;
+  showOnlyBattery = false; showOnlyKd = false; showOnlyProject = false;
+  showOnlyKd = targetState;
+  
+  resetCategoryButtonsUI();
+  if (showOnlyKd) {
+    kdFilterBtn.classList.add("ring-2", "ring-blue-500", "bg-blue-50", "dark:bg-blue-900/30");
+  }
   applyFiltersAndRender();
 });
 
 projectFilterBtn?.addEventListener("click", () => {
-  showOnlyProject = !showOnlyProject;
-  projectFilterBtn.classList.toggle("ring-2", showOnlyProject);
-  projectFilterBtn.classList.toggle("ring-purple-500", showOnlyProject);
-  projectFilterBtn.classList.toggle("bg-purple-50", showOnlyProject);
-  projectFilterBtn.classList.toggle("dark:bg-purple-900/30", showOnlyProject);
+  const targetState = !showOnlyProject;
+  showOnlyBattery = false; showOnlyKd = false; showOnlyProject = false;
+  showOnlyProject = targetState;
+  
+  resetCategoryButtonsUI();
+  if (showOnlyProject) {
+    projectFilterBtn.classList.add("ring-2", "ring-purple-500", "bg-purple-50", "dark:bg-purple-900/30");
+  }
   applyFiltersAndRender();
 });
 
@@ -1762,39 +1794,44 @@ function renderCharts(data: DeliveryRow[]) {
      return;
   }
 
-  const statusColors: Record<string, string> = {
-    "ENTREGUE": "#22c55e",
-    "A CAMINHO": "#3b82f6",
-    "AGUARDANDO DESOVA": "#eab308",
-    "PENDENTE": "#64748b",
-    "OUTROS": "#ef4444"
-  };
+    const statusColors: Record<string, string> = {
+      "ENTREGUE": "#22c55e",
+      "A CAMINHO": "#3b82f6",
+      "AGUARDANDO DESOVA": "#a855f7",
+      "BACKLOG": "#f97316",
+      "PENDENTE": "#64748b",
+      "ADIADO": "#6366f1",
+      "CANCELADO": "#ef4444"
+    };
 
-  const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), t("pending"), t("chartsOther")];
-  
-  function getStatusIndex(s: string) {
-    if (s === "ENTREGUE") return 0;
-    if (s === "A CAMINHO") return 1;
-    if (s === "AGUARDANDO DESOVA") return 2;
-    if (s === "PENDENTE") return 3;
-    return 4;
-  }
+    const statusLabels = [t("delivered"), t("inTransit"), t("awaitingUnload"), t("statusBacklog"), t("pending"), t("postponed"), t("canceled")];
+    
+    function getStatusIndex(s: string) {
+      if (s === "ENTREGUE") return 0;
+      if (s === "A CAMINHO") return 1;
+      if (s === "AGUARDANDO DESOVA") return 2;
+      if (s === "BACKLOG") return 3;
+      if (s === "PENDENTE") return 4;
+      if (s === "ADIADO") return 5;
+      if (s === "CANCELADO") return 6;
+      return 4;
+    }
 
-  const customLegendHTML = `
-    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sticky top-4">
-      <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 border-b border-slate-200 dark:border-slate-600 pb-2 uppercase tracking-wider" data-i18n="legendTitle">${t("legendTitle")}</h4>
-      <div class="space-y-3 text-sm text-slate-600 dark:text-slate-300 font-medium">
-        ${statusLabels.map((lbl, idx) => `
-          <div class="flex items-center">
-            <span class="w-4 h-4 rounded-md mr-3 shadow-sm border border-slate-200/20" style="background-color: ${Object.values(statusColors)[idx]}"></span>
-            <span>${lbl}</span>
-          </div>
-        `).join('')}
+    const customLegendHTML = `
+      <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sticky top-4">
+        <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 border-b border-slate-200 dark:border-slate-600 pb-2 uppercase tracking-wider" data-i18n="legendTitle">${t("legendTitle")}</h4>
+        <div class="space-y-3 text-sm text-slate-600 dark:text-slate-300 font-medium">
+          ${statusLabels.map((lbl, idx) => `
+            <div class="flex items-center">
+              <span class="w-4 h-4 rounded-md mr-3 shadow-sm border border-slate-200/20" style="background-color: ${Object.values(statusColors)[idx]}"></span>
+              <span>${lbl}</span>
+            </div>
+          `).join('')}
+        </div>
       </div>
-    </div>
-  `;
+    `;
 
-  let overallCounts = [0, 0, 0, 0, 0];
+    let overallCounts = [0, 0, 0, 0, 0, 0, 0];
   data.forEach((row) => {
     let s = normalizeText(row["STATUS"] || "PENDENTE");
     overallCounts[getStatusIndex(s)]++;
