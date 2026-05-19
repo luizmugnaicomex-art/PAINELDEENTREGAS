@@ -2546,8 +2546,13 @@ function renderTimeTable(data: DeliveryRow[]) {
 
         totalTimeSum += durationHours; validRecords++;
         const timeVal = startDt.getHours() * 100 + startDt.getMinutes();
-        if (timeVal >= 630 && timeVal <= 1500) { totalTimeSumP1 += durationHours; validRecordsP1++; }
-        else if (timeVal >= 1501 || (startDt.getHours() === 0 && startDt.getMinutes() === 0)) { totalTimeSumP2 += durationHours; validRecordsP2++; }
+        if (timeVal >= 630 && timeVal <= 1500) { 
+          totalTimeSumP1 += durationHours; 
+          validRecordsP1++; 
+        } else { 
+          totalTimeSumP2 += durationHours; 
+          validRecordsP2++; 
+        }
       }
     }
 
@@ -2581,13 +2586,43 @@ function renderTimeTable(data: DeliveryRow[]) {
   // Assume a standard operational shift ending at 22:00
   const shiftEnd = new Date(now);
   shiftEnd.setHours(22, 0, 0, 0);
-  
+
   // If it's already past shift end, assume it's for 22:00 tomorrow or just for the current window
   let remainingMs = shiftEnd.getTime() - now.getTime();
   if (remainingMs < 0) remainingMs = 0; // Or handle next day shift
-  
+
   const hoursRemainingInShift = remainingMs / (1000 * 60 * 60);
-  
+
+  // Standard starting time for shift is 06:30
+  const shiftStart = new Date(now);
+  shiftStart.setHours(6, 30, 0, 0);
+
+  let elapsedHrs = (now.getTime() - shiftStart.getTime()) / (1000 * 60 * 60);
+  if (elapsedHrs <= 0) {
+    elapsedHrs = 0.1; // Safety fallback
+  }
+  if (elapsedHrs > 15.5) {
+    elapsedHrs = 15.5; // Max shift is 15.5h (06:30 to 22:00)
+  }
+
+  // Throughput Calculations (containers/hour)
+  const currentThroughput = delivered / elapsedHrs;
+  const requiredThroughput = hoursRemainingInShift > 0 ? remaining / hoursRemainingInShift : 0;
+  const pctIncrease = currentThroughput > 0 ? ((requiredThroughput / currentThroughput) - 1) * 100 : 0;
+
+  const projectedAdditional = currentThroughput * hoursRemainingInShift;
+  const estimatedRemainingBacklog = Math.max(0, remaining - projectedAdditional);
+
+  const pctIncreaseFormatted = pctIncrease > 100 
+    ? `mais do que duplicar (+${pctIncrease.toFixed(0)}%)` 
+    : pctIncrease > 0 
+      ? `aumentar em +${pctIncrease.toFixed(0)}%`
+      : `manter (ritmo atual com folga de ${Math.abs(pctIncrease).toFixed(0)}%)`;
+
+  const alertOrSuccess = pctIncrease > 0
+    ? `⚠️ ALERTA DE CAPACIDADE: O time precisaria ${pctIncreaseFormatted} a velocidade de escoamento atual para cumprir o plano de hoje. Mantendo o ritmo de ${currentThroughput.toFixed(1)} cont./h, a projeção é entregar apenas ~${Math.round(projectedAdditional)} unidades, gerando um Backlog estimado de ${Math.ceil(estimatedRemainingBacklog)} containers para amanhã.`
+    : `✅ DESEMPENHO SEGURO: A operação segue dentro do ritmo planejado com folga de capacidade. Mantendo o ritmo de ${currentThroughput.toFixed(1)} cont./h, a projeção é entregar com tranquilidade os ${remaining} restantes, sem gerar backlog para amanhã.`;
+
   // Takt Time Logic
   const activeFronts = 15; // Calculation base for active teams/fronts
   const targetTaktTimeHrs = (hoursRemainingInShift > 0 && remaining > 0) ? (hoursRemainingInShift * activeFronts) / remaining : 0;
@@ -2599,10 +2634,42 @@ function renderTimeTable(data: DeliveryRow[]) {
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
       <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-5">
         <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 uppercase tracking-wider flex items-center">
-          <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-          Capacidade Operacional (Takt Time Meta)
+          <div class="relative group cursor-help flex items-center mr-2">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+            </span>
+            <!-- Tooltip Popup -->
+            <div class="pointer-events-none absolute bottom-full left-0 mb-2 w-80 origin-bottom-left scale-0 transition-all group-hover:scale-100 z-50 bg-slate-900 dark:bg-slate-950 border border-slate-700 text-slate-200 rounded-lg p-3 shadow-xl text-[10px] normal-case tracking-normal">
+              <div class="font-bold border-b border-slate-700 pb-1 mb-2 uppercase text-blue-400 text-[10px] tracking-wider flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 11h.01M12 14h.01M12 17h.01M15 11h.01M15 14h.01M15 17h.01M18 11h.01M18 14h.01M18 17h.01" />
+                </svg>
+                Fórmulas e Métricas Operacionais
+              </div>
+              <div class="space-y-2 text-slate-300">
+                <div>
+                  <strong class="text-blue-300">📊 Vazão Média Atual:</strong>
+                  <div class="font-mono bg-slate-800/80 px-1 py-0.5 rounded text-[9px] mt-0.5 select-all">Vazão = Entregues / Horas Decorridas desde 06:30</div>
+                </div>
+                <div>
+                  <strong class="text-blue-300">🎯 Vazão Meta Necessária:</strong>
+                  <div class="font-mono bg-slate-800/80 px-1 py-0.5 rounded text-[9px] mt-0.5 select-all">Meta = Restantes / Relógio Restante até 22:00</div>
+                </div>
+                <div>
+                  <strong class="text-blue-300">⏳ Meta Takt Time (15 frentes):</strong>
+                  <div class="font-mono bg-slate-800/80 px-1 py-0.5 rounded text-[9px] mt-0.5 select-all">Takt = (Horas Shift Rest. * 15 Frentes) / Restantes</div>
+                </div>
+                <div>
+                  <strong class="text-blue-300">🔮 Previsão de Backlog:</strong>
+                  <div class="font-mono bg-slate-800/80 px-1 py-0.5 rounded text-[9px] mt-0.5 select-all">Backlog = Restantes - (Vazão Atual * Horas Shift Rest.)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          Capacidade Operacional (Análise de Vazão e Tempo)
         </h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
           <div class="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600">
             <span class="text-[10px] font-bold text-slate-500 block uppercase mb-1">Restantes</span>
             <span class="text-xl font-black text-slate-800 dark:text-slate-100">${remaining}</span>
@@ -2612,26 +2679,31 @@ function renderTimeTable(data: DeliveryRow[]) {
             <span class="text-xl font-black text-blue-700 dark:text-blue-300">${hoursRemainingInShift.toFixed(1)}h</span>
           </div>
           <div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800/30 font-mono">
-            <span class="text-[10px] font-bold text-emerald-600 block uppercase mb-1">Meta Takt (15F)</span>
-            <span class="text-xl font-black text-emerald-700 dark:text-emerald-300">${targetTaktMins} min</span>
+            <span class="text-[10px] font-bold text-emerald-600 block uppercase mb-1">Vazão Atual</span>
+            <span class="text-lg font-black text-emerald-700 dark:text-emerald-300">${currentThroughput.toFixed(1)} <span class="text-[10px]">c/h</span></span>
           </div>
           <div class="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-100 dark:border-orange-800/30 font-mono">
-            <span class="text-[10px] font-bold text-orange-600 block uppercase mb-1">H Trabalho Total</span>
-            <span class="text-xl font-black text-orange-700 dark:text-orange-300">${remaining > 0 ? (hoursNeeded).toFixed(1) + 'h' : '0h'}</span>
+            <span class="text-[10px] font-bold text-orange-600 block uppercase mb-1">Vazão Meta</span>
+            <span class="text-lg font-black text-orange-700 dark:text-orange-300">${requiredThroughput.toFixed(1)} <span class="text-[10px]">c/h</span></span>
+          </div>
+          <div class="p-3 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-100 dark:border-teal-800/30 font-mono">
+            <span class="text-[10px] font-bold text-teal-600 block uppercase mb-1">Meta Takt (15F)</span>
+            <span class="text-lg font-black text-teal-700 dark:text-teal-300">${targetTaktMins} min</span>
+          </div>
+          <div class="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600 font-mono">
+            <span class="text-[10px] font-bold text-slate-500 block uppercase mb-1">H Trabalho Tot.</span>
+            <span class="text-lg font-black text-slate-700 dark:text-slate-300">${remaining > 0 ? hoursNeeded.toFixed(1) + 'h' : '0h'}</span>
           </div>
         </div>
         
-        <div class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+        <div class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
           <p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
             <strong class="text-slate-900 dark:text-white uppercase text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded mr-1">Veredito Operacional:</strong> 
-            Para liquidar os <span class="font-bold">${remaining}</span> containers restantes nas próximas <span class="font-bold underline">${hoursRemainingInShift.toFixed(1)}h</span> de turno utilizando as nossas <span class="font-bold">15 frentes de trabalho ativas</span>, o tempo médio por operação precisa ser reduzido de <span class="font-bold">${formatDuration(avgHours)}</span> para no máximo <span class="font-bold text-emerald-600">${targetTaktMins} minutos</span> por container.
-            <br/>
-            <span class="text-[10px] mt-2 block font-medium ${deviationMins > 0 ? 'text-red-500' : 'text-emerald-500'}">
-              ${deviationMins > 0 
-                ? `⚠️ ALERTA DE DESVIO: O ritmo atual está ${deviationMins}min ACIMA da meta necessária para zerar o plano hoje.` 
-                : `✅ DESEMPENHO: O ritmo atual está adequado para cumprir a meta do dia.`}
-            </span>
+            Desde o início do turno às <span class="font-bold text-slate-800 dark:text-slate-200 text-xs">06:30</span>, a equipe mantém uma média de <span class="font-bold text-slate-800 dark:text-slate-200 text-xs underline">${currentThroughput.toFixed(1)}</span> containers concluídos por hora. Nas próximas <span class="font-bold underline text-xs">${hoursRemainingInShift.toFixed(1)}h</span> restantes, para liquidar os <span class="font-bold text-blue-600 dark:text-blue-400 text-xs">${remaining}</span> containers pendentes, o ritmo da operação precisaria subir para <span class="font-bold text-orange-600 dark:text-orange-400 font-mono text-xs">${requiredThroughput.toFixed(1)}</span> containers por hora.
           </p>
+          <div class="p-3 rounded-md text-[11px] font-medium leading-relaxed bg-slate-50 dark:bg-slate-700/30 border ${pctIncrease > 0 ? 'border-red-200/30 text-red-600 dark:text-red-400 bg-red-50/10' : 'border-emerald-200/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50/10'}">
+            ${alertOrSuccess}
+          </div>
         </div>
       </div>
 
