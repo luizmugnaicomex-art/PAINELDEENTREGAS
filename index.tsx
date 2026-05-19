@@ -2562,35 +2562,98 @@ function renderTimeTable(data: DeliveryRow[]) {
       </tr>`;
   }).join("");
 
-  const formatAvg = (sum: number, count: number) => {
-    if (count === 0) return "-";
-    const avgH = sum / count;
-    const aDays = Math.floor(avgH / 24), aHours = Math.floor(avgH % 24), aMins = Math.round((avgH - Math.floor(avgH)) * 60);
-    return aDays > 0 ? `${aDays}v ${aHours}h ${aMins}m` : `${aHours}h ${aMins}m`;
+  const scheduled = deliveryData.filter(d => normalizeText(d["STATUS"] || "") !== "CANCELADO").length;
+  const delivered = deliveryData.filter(d => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
+  const remaining = Math.max(0, scheduled - delivered);
+  const avgHours = validRecords > 0 ? totalTimeSum / validRecords : 0;
+  const hoursNeeded = remaining * avgHours;
+
+  const formatDuration = (h: number) => {
+    const hr = Math.floor(h), m = Math.round((h - Math.floor(h)) * 60);
+    return `${hr}h ${m}m`;
   };
 
+  const now = new Date();
+  // Assume a standard operational shift ending at 22:00
+  const shiftEnd = new Date(now);
+  shiftEnd.setHours(22, 0, 0, 0);
+  
+  // If it's already past shift end, assume it's for 22:00 tomorrow or just for the current window
+  let remainingMs = shiftEnd.getTime() - now.getTime();
+  if (remainingMs < 0) remainingMs = 0; // Or handle next day shift
+  
+  const hoursRemainingInShift = remainingMs / (1000 * 60 * 60);
+  
+  // Takt Time Logic
+  const activeFronts = 15; // Calculation base for active teams/fronts
+  const targetTaktTimeHrs = (hoursRemainingInShift > 0 && remaining > 0) ? (hoursRemainingInShift * activeFronts) / remaining : 0;
+  const targetTaktMins = Math.round(targetTaktTimeHrs * 60);
+  const currentAvgMins = Math.round(avgHours * 60);
+  const deviationMins = currentAvgMins - targetTaktMins;
+
   timeContent.innerHTML = `
-    <div class="mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col md:flex-row justify-between items-center gap-4">
-       <div>
-         <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-1" data-i18n="timeTab">${t("timeTab")}</h3>
-         <p class="text-xs text-slate-500 dark:text-slate-400">Registros válidos: <strong class="text-slate-700 dark:text-slate-200">${validRecords}</strong></p>
-       </div>
-       <div class="flex flex-wrap gap-4 justify-end">
-         <div class="bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-lg border border-blue-100">
-           <span class="text-[9px] font-bold text-blue-500 block uppercase">Média Geral</span>
-           <span class="text-base font-black text-blue-700 dark:text-blue-300">${formatAvg(totalTimeSum, validRecords)}</span>
-         </div>
-         <div class="bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 rounded-lg border border-emerald-100">
-           <span class="text-[9px] font-bold text-emerald-600 block uppercase">${t("avgPeriod1")}</span>
-           <span class="text-base font-black text-emerald-700 dark:text-emerald-300">${formatAvg(totalTimeSumP1, validRecordsP1)}</span>
-         </div>
-         <div class="bg-amber-50 dark:bg-amber-900/30 px-4 py-2 rounded-lg border border-amber-100">
-           <span class="text-[9px] font-bold text-amber-600 block uppercase">${t("avgPeriod2")}</span>
-           <span class="text-base font-black text-amber-700 dark:text-amber-300">${formatAvg(totalTimeSumP2, validRecordsP2)}</span>
-         </div>
-       </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-5">
+        <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 uppercase tracking-wider flex items-center">
+          <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+          Capacidade Operacional (Takt Time Meta)
+        </h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600">
+            <span class="text-[10px] font-bold text-slate-500 block uppercase mb-1">Restantes</span>
+            <span class="text-xl font-black text-slate-800 dark:text-slate-100">${remaining}</span>
+          </div>
+          <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30">
+            <span class="text-[10px] font-bold text-blue-600 block uppercase mb-1">Relógio Rest.</span>
+            <span class="text-xl font-black text-blue-700 dark:text-blue-300">${hoursRemainingInShift.toFixed(1)}h</span>
+          </div>
+          <div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800/30 font-mono">
+            <span class="text-[10px] font-bold text-emerald-600 block uppercase mb-1">Meta Takt (15F)</span>
+            <span class="text-xl font-black text-emerald-700 dark:text-emerald-300">${targetTaktMins} min</span>
+          </div>
+          <div class="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-100 dark:border-orange-800/30 font-mono">
+            <span class="text-[10px] font-bold text-orange-600 block uppercase mb-1">H Trabalho Total</span>
+            <span class="text-xl font-black text-orange-700 dark:text-orange-300">${remaining > 0 ? (hoursNeeded).toFixed(1) + 'h' : '0h'}</span>
+          </div>
+        </div>
+        
+        <div class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+          <p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+            <strong class="text-slate-900 dark:text-white uppercase text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded mr-1">Veredito Operacional:</strong> 
+            Para liquidar os <span class="font-bold">${remaining}</span> containers restantes nas próximas <span class="font-bold underline">${hoursRemainingInShift.toFixed(1)}h</span> de turno utilizando as nossas <span class="font-bold">15 frentes de trabalho ativas</span>, o tempo médio por operação precisa ser reduzido de <span class="font-bold">${formatDuration(avgHours)}</span> para no máximo <span class="font-bold text-emerald-600">${targetTaktMins} minutos</span> por container.
+            <br/>
+            <span class="text-[10px] mt-2 block font-medium ${deviationMins > 0 ? 'text-red-500' : 'text-emerald-500'}">
+              ${deviationMins > 0 
+                ? `⚠️ ALERTA DE DESVIO: O ritmo atual está ${deviationMins}min ACIMA da meta necessária para zerar o plano hoje.` 
+                : `✅ DESEMPENHO: O ritmo atual está adequado para cumprir a meta do dia.`}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+          <span class="text-[10px] font-bold text-blue-500 block uppercase mb-2">Resumo de Médias</span>
+          <div class="space-y-3">
+             <div class="flex justify-between items-end border-b border-slate-50 dark:border-slate-700 pb-2">
+               <span class="text-xs font-medium text-slate-500">Média Geral:</span>
+               <span class="text-lg font-black text-blue-600 dark:text-blue-400">${formatDuration(avgHours)}</span>
+             </div>
+             <div class="flex justify-between items-end border-b border-slate-50 dark:border-slate-700 pb-2">
+               <span class="text-xs font-medium text-slate-500">1º Período:</span>
+               <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">${validRecordsP1 > 0 ? formatDuration(totalTimeSumP1/validRecordsP1) : "-"}</span>
+             </div>
+             <div class="flex justify-between items-end">
+               <span class="text-xs font-medium text-slate-500">2º Período:</span>
+               <span class="text-base font-bold text-amber-600 dark:text-amber-400">${validRecordsP2 > 0 ? formatDuration(totalTimeSumP2/validRecordsP2) : "-"}</span>
+             </div>
+          </div>
+        </div>
+        <p class="text-[10px] text-slate-400 px-2 italic">Ref. Horário Relógio: ${now.toLocaleTimeString()}</p>
+      </div>
     </div>
-    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-h-[400px]">
+
+    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-h-[450px]">
       <table class="w-full text-xs text-left">
         <thead class="bg-slate-50 dark:bg-slate-700 sticky top-0">
           <tr>
