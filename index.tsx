@@ -54,6 +54,7 @@ try {
   db = null;
 }
 
+
 /* ------------------------------- DOM Elements ------------------------------ */
 const fileUpload = document.getElementById("file-upload") as HTMLInputElement;
 const searchInput = document.getElementById("search-input") as HTMLInputElement;
@@ -2869,7 +2870,7 @@ exportExcelBtn?.addEventListener("click", async () => {
   if (!deliveryData || deliveryData.length === 0) return showToast(t("noDataToExport"), "warning");
 
   const exportColumns = [
-    "STATUS", "DELIVERY AT BYD", "CONTAINER", "BL", "LOT", "MODEL", "RATIONALIZATION", "TRANSPORTATION COMPANY", 
+    "STATUS", "DELIVERY AT BYD", "CONTAINER", "BL", "LOT", "MODEL", "OPERATION SCOPE", "RATIONALIZATION", "TRANSPORTATION COMPANY", 
     "VESSEL", "BONDED WAREHOUSE", "DRIVER NAME", "CPF", "LICENSE P (Plate 1)", "LICENSE P (Plate 2)", "TRUCK TYPE",
     "TERMINAL - INÍCIO DE ROTA", 
     "DATA E HORARIO DE DESCARGA", 
