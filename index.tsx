@@ -54,7 +54,6 @@ try {
   db = null;
 }
 
-
 /* ------------------------------- DOM Elements ------------------------------ */
 const fileUpload = document.getElementById("file-upload") as HTMLInputElement;
 const searchInput = document.getElementById("search-input") as HTMLInputElement;
@@ -71,6 +70,8 @@ const exportPdfBtn = document.getElementById("export-pdf-btn") as HTMLButtonElem
 const themeToggleBtn = document.getElementById("theme-toggle") as HTMLButtonElement;
 const batteryFilterBtn = document.getElementById("battery-filter-btn") as HTMLButtonElement;
 const kdFilterBtn = document.getElementById("kd-filter-btn") as HTMLButtonElement;
+const spFilterBtn = document.getElementById("sp-filter-btn") as HTMLButtonElement;
+const pbpFilterBtn = document.getElementById("pbp-filter-btn") as HTMLButtonElement;
 const projectFilterBtn = document.getElementById("project-filter-btn") as HTMLButtonElement;
 const lotSearchInput = document.getElementById("lot-search-input") as HTMLInputElement;
 const lotSearchContainer = document.getElementById("lot-search-container") as HTMLDivElement;
@@ -97,7 +98,7 @@ const translations = {
     pageTitle: "KD Monitor Dashboard",
     headerTitle: "KD Monitor Dashboard",
     uploadPrompt: "Carregue sua planilha de agendamento para começar",
-    searchInputPlaceholder: "Pesquisar container, BL, navio...",
+    searchInputPlaceholder: "Pesquisar container, BL, navio, PO...",
     searchLotPlaceholder: "Pesquisar LOTE",
     uploadLogoTooltip: "Carregar logo da empresa",
     toggleThemeTooltip: "Alternar tema",
@@ -105,6 +106,8 @@ const translations = {
     uploadSheetTooltip: "Carregar Planilha",
     filterBatteryTooltip: "Filtrar Baterias",
     filterKdTooltip: "Filtrar KD",
+    filterSpTooltip: "Filtrar Peças de Reposição (SP)",
+    filterPbpTooltip: "Filtrar Part by Part (PBP)",
     filterProjectTooltip: "Filtrar Project Cargo",
     exportExcelButton: "Exportar Excel",
     exportPdfButton: "Exportar PDF",
@@ -239,7 +242,7 @@ const translations = {
     pageTitle: "KD Monitor Dashboard",
     headerTitle: "KD Monitor Dashboard",
     uploadPrompt: "Upload your schedule spreadsheet to begin",
-    searchInputPlaceholder: "Search container, BL, vessel...",
+    searchInputPlaceholder: "Search container, BL, vessel, PO...",
     searchLotPlaceholder: "Search LOT",
     uploadLogoTooltip: "Upload company logo",
     toggleThemeTooltip: "Toggle theme",
@@ -247,6 +250,8 @@ const translations = {
     uploadSheetTooltip: "Upload Spreadsheet",
     filterBatteryTooltip: "Filter Batteries",
     filterKdTooltip: "Filter KD",
+    filterSpTooltip: "Filter Spare Parts (SP)",
+    filterPbpTooltip: "Filter Part by Part (PBP)",
     filterProjectTooltip: "Filter Project Cargo",
     exportExcelButton: "Export Excel",
     exportPdfButton: "Export PDF",
@@ -380,7 +385,7 @@ const translations = {
     pageTitle: "KD 监控仪表板",
     headerTitle: "KD 监控仪表板",
     uploadPrompt: "上传您的排程电子表格以开始",
-    searchInputPlaceholder: "搜索集装箱、提单 (BL)、船名...",
+    searchInputPlaceholder: "搜索集装箱、提单 (BL)、船名、PO...",
     searchLotPlaceholder: "搜索批号 (LOT)",
     uploadLogoTooltip: "上传公司标志",
     toggleThemeTooltip: "切换主题",
@@ -388,6 +393,8 @@ const translations = {
     uploadSheetTooltip: "上传电子表格",
     filterBatteryTooltip: "过滤电池",
     filterKdTooltip: "过滤 KD",
+    filterSpTooltip: "过滤备件 (SP)",
+    filterPbpTooltip: "过滤按件 (PBP)",
     filterProjectTooltip: "过滤项目货物 (Project Cargo)",
     exportExcelButton: "导出 Excel",
     exportPdfButton: "导出 PDF",
@@ -552,6 +559,8 @@ let searchDebounceTimer: number;
 let activeStatusFilter: string | null = null;
 let showOnlyBattery: boolean = false;
 let showOnlyKd: boolean = false;
+let showOnlySp: boolean = false;
+let showOnlyPbp: boolean = false;
 let showOnlyProject: boolean = false;
 let isMacroView: boolean = false;
 let overallChart: any = null;
@@ -1019,36 +1028,53 @@ function isBatteryRow(row: any): boolean {
 }
 
 function isKdRow(row: any): boolean {
-  // Disjoint: if it's already identified as battery, it's not in the KD bucket for filtering
   if (isBatteryRow(row)) return false;
-
   const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
-  const mod = normalizeText(row["MODEL"] || "");
-  const rat = normalizeText(row["RATIONALIZATION"] || "");
-  const searchStr = `${mt} ${mod} ${rat}`;
-  
-  // High priority: Material type explicitly says KD/SKD/CKD
   if (mt.includes("KD") || mt.includes("CKD") || mt.includes("SKD")) return true;
   
-  // Secondary: Model indicates it's an assembly kit
+  const mod = normalizeText(row["MODEL"] || "");
+  const rat = normalizeText(row["RATIONALIZATION"] || "");
   const isAssembly = mod.includes("BIG ASSEMBLY") || rat.includes("BIG ASSEMBLY");
   const hasKdKeyword = mod.includes("KD") || mod.includes("SKD") || mod.includes("CKD");
-  
   return isAssembly || hasKdKeyword;
 }
 
-function isProjectRow(row: any): boolean {
+function isSpRow(row: any): boolean {
+  if (isBatteryRow(row) || isKdRow(row)) return false;
   const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
   const mod = normalizeText(row["MODEL"] || "");
   const rat = normalizeText(row["RATIONALIZATION"] || "");
-  const searchStr = `${mt} ${mod} ${rat}`;
+  const op = normalizeText(row["OPERATION SCOPE"] || "");
   
-  // If it's explicitly project cargo keywords
-  const hasProjectKeywords = searchStr.includes("PROJECT") || searchStr.includes("PROJETO") || searchStr.includes("GENERAL CARGO");
-  if (hasProjectKeywords) return true;
+  // Prioritize using the MODEL as a base
+  if (mod.includes("SPARE") || mod.includes("PECAS") || mod.includes("REPOSIC") || mod.includes("SPARE PARTS")) {
+    return true;
+  }
+  
+  const combined = ` ${mt} ${mod} ${rat} ${op} `.replace(/[^A-Z0-9]/g, " ");
+  const tokens = combined.split(/\s+/).filter(Boolean);
+  return tokens.includes("SPARE") || tokens.includes("PARTS") || tokens.includes("PECAS") || tokens.includes("SP") || combined.includes("REPOSIC");
+}
 
-  // Disjoint: If it's not battery and not KD, it's Project Cargo (PC)
-  return !isBatteryRow(row) && !isKdRow(row);
+function isPbpRow(row: any): boolean {
+  if (isBatteryRow(row) || isKdRow(row) || isSpRow(row)) return false;
+  const mt = normalizeText(row["TYPE OF MATERIAL"] || "");
+  const mod = normalizeText(row["MODEL"] || "");
+  const rat = normalizeText(row["RATIONALIZATION"] || "");
+  const op = normalizeText(row["OPERATION SCOPE"] || "");
+  
+  // Prioritize using the MODEL as a base
+  if (mod.includes("PBP") || mod.includes("PART BY PART")) {
+    return true;
+  }
+  
+  const combined = ` ${mt} ${mod} ${rat} ${op} `.replace(/[^A-Z0-9]/g, " ");
+  const tokens = combined.split(/\s+/).filter(Boolean);
+  return tokens.includes("PBP") || combined.includes("PART BY PART");
+}
+
+function isProjectRow(row: any): boolean {
+  return !isBatteryRow(row) && !isKdRow(row) && !isSpRow(row) && !isPbpRow(row);
 }
 
 function applyFiltersAndRender(activeTabId: string | null = null) {
@@ -1066,6 +1092,14 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
 
   if (showOnlyKd) {
     filteredData = filteredData.filter(row => isKdRow(row));
+  }
+
+  if (showOnlySp) {
+    filteredData = filteredData.filter(row => isSpRow(row));
+  }
+
+  if (showOnlyPbp) {
+    filteredData = filteredData.filter(row => isPbpRow(row));
   }
 
   if (showOnlyProject) {
@@ -1086,8 +1120,21 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   if (query) {
     const searchTerms = query.split(/[\s,\n\t]+/).filter(t => t.length > 0);
     filteredData = filteredData.filter((row) => {
-      const rowValues = Object.values(row).map(v => String(v ?? "").toLowerCase());
-      return searchTerms.some(term => rowValues.some(val => val.includes(term)));
+      const poValues = [
+        row["PO SAP"],
+        row["PO"],
+        row["PO NUMBER"],
+        row["PO_SAP"],
+        row["Pedido"],
+        row["PO/SAP"]
+      ].filter(v => v !== undefined && v !== null && v !== "").map(v => String(v).toLowerCase());
+
+      const rowValues = Object.entries(row).map(([k, v]) => String(v ?? "").toLowerCase());
+      return searchTerms.some(term => {
+        if (rowValues.some(val => val.includes(term))) return true;
+        if (poValues.some(val => val.includes(term))) return true;
+        return false;
+      });
     });
   }
 
@@ -1113,6 +1160,12 @@ function updateStats() {
   }
   if (showOnlyKd) {
     dataForStats = dataForStats.filter(row => isKdRow(row));
+  }
+  if (showOnlySp) {
+    dataForStats = dataForStats.filter(row => isSpRow(row));
+  }
+  if (showOnlyPbp) {
+    dataForStats = dataForStats.filter(row => isPbpRow(row));
   }
   if (showOnlyProject) {
     dataForStats = dataForStats.filter(row => isProjectRow(row));
@@ -1430,14 +1483,16 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                 const status = normalizeText(row["STATUS"] || "PENDENTE") || "PENDENTE";
                 const isBattery = isBatteryRow(row);
                 const isKd = isKdRow(row);
+                const isSp = isSpRow(row);
+                const isPbp = isPbpRow(row);
                 const rowClass = `transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer ${
                   isBattery ? "is-battery" : ""
-                } ${isKd ? "is-kd" : ""} ${status === "ENTREGUE" ? "bg-green-100 dark:bg-green-900/30" : status === "CANCELADO" ? "bg-red-100 dark:bg-red-900/30" : status === "BACKLOG" ? "bg-orange-100 dark:bg-orange-900/30" : ""}`;
+                } ${isKd ? "is-kd" : ""} ${isSp ? "is-sp" : ""} ${isPbp ? "is-pbp" : ""} ${status === "ENTREGUE" ? "bg-green-100 dark:bg-green-900/30" : status === "CANCELADO" ? "bg-red-100 dark:bg-red-900/30" : status === "BACKLOG" ? "bg-orange-100 dark:bg-orange-900/30" : ""}`;
 
                 const plate = String(row["TRUCK LICENSE PLATE 1"] || row["PLATE"] || "").trim();
 
                 return `<tr class="${rowClass}" data-row-id="${row._id}">
-                  <td class="px-4 py-3 text-xs text-center border-l-8 ${isBattery ? "border-amber-600" : isKd ? "border-blue-700" : "border-transparent"}">${rowIndex + 1}</td>
+                  <td class="px-4 py-3 text-xs text-center border-l-8 ${isBattery ? "border-amber-600" : isKd ? "border-blue-700" : isSp ? "border-orange-600" : isPbp ? "border-emerald-600" : "border-transparent"}">${rowIndex + 1}</td>
                   <td class="px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100">
                     ${row["CONTAINER"] || "-"}
                     ${isBattery
@@ -1447,6 +1502,12 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                       : ""}
                     ${isKd
                       ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 uppercase">KD</span>`
+                      : ""}
+                    ${isSp
+                      ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 uppercase">SP</span>`
+                      : ""}
+                    ${isPbp
+                      ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 uppercase">PBP</span>`
                       : ""}
                   </td>
                   <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">${row["MODEL"] || "-"}</td>
@@ -1712,15 +1773,15 @@ lotSearchInput?.addEventListener("input", () => {
 });
 
 function resetCategoryButtonsUI() {
-  [batteryFilterBtn, kdFilterBtn, projectFilterBtn].forEach(btn => {
+  [batteryFilterBtn, kdFilterBtn, spFilterBtn, pbpFilterBtn, projectFilterBtn].forEach(btn => {
     if (!btn) return;
-    btn.classList.remove("ring-2", "ring-amber-500", "ring-blue-500", "ring-purple-500", "bg-amber-50", "bg-blue-50", "bg-purple-50", "dark:bg-amber-900/30", "dark:bg-blue-900/30", "dark:bg-purple-900/30");
+    btn.classList.remove("ring-2", "ring-amber-500", "ring-blue-500", "ring-orange-500", "ring-emerald-500", "ring-purple-500", "bg-amber-50", "bg-blue-50", "bg-orange-50", "bg-emerald-50", "bg-purple-50", "dark:bg-amber-900/30", "dark:bg-blue-900/30", "dark:bg-orange-900/30", "dark:bg-emerald-900/30", "dark:bg-purple-900/30");
   });
 }
 
 batteryFilterBtn?.addEventListener("click", () => {
   const targetState = !showOnlyBattery;
-  showOnlyBattery = false; showOnlyKd = false; showOnlyProject = false;
+  showOnlyBattery = false; showOnlyKd = false; showOnlySp = false; showOnlyPbp = false; showOnlyProject = false;
   showOnlyBattery = targetState;
   
   resetCategoryButtonsUI();
@@ -1732,7 +1793,7 @@ batteryFilterBtn?.addEventListener("click", () => {
 
 kdFilterBtn?.addEventListener("click", () => {
   const targetState = !showOnlyKd;
-  showOnlyBattery = false; showOnlyKd = false; showOnlyProject = false;
+  showOnlyBattery = false; showOnlyKd = false; showOnlySp = false; showOnlyPbp = false; showOnlyProject = false;
   showOnlyKd = targetState;
   
   resetCategoryButtonsUI();
@@ -1742,9 +1803,33 @@ kdFilterBtn?.addEventListener("click", () => {
   applyFiltersAndRender();
 });
 
+spFilterBtn?.addEventListener("click", () => {
+  const targetState = !showOnlySp;
+  showOnlyBattery = false; showOnlyKd = false; showOnlySp = false; showOnlyPbp = false; showOnlyProject = false;
+  showOnlySp = targetState;
+  
+  resetCategoryButtonsUI();
+  if (showOnlySp) {
+    spFilterBtn.classList.add("ring-2", "ring-orange-500", "bg-orange-50", "dark:bg-orange-900/30");
+  }
+  applyFiltersAndRender();
+});
+
+pbpFilterBtn?.addEventListener("click", () => {
+  const targetState = !showOnlyPbp;
+  showOnlyBattery = false; showOnlyKd = false; showOnlySp = false; showOnlyPbp = false; showOnlyProject = false;
+  showOnlyPbp = targetState;
+  
+  resetCategoryButtonsUI();
+  if (showOnlyPbp) {
+    pbpFilterBtn.classList.add("ring-2", "ring-emerald-500", "bg-emerald-50", "dark:bg-emerald-900/30");
+  }
+  applyFiltersAndRender();
+});
+
 projectFilterBtn?.addEventListener("click", () => {
   const targetState = !showOnlyProject;
-  showOnlyBattery = false; showOnlyKd = false; showOnlyProject = false;
+  showOnlyBattery = false; showOnlyKd = false; showOnlySp = false; showOnlyPbp = false; showOnlyProject = false;
   showOnlyProject = targetState;
   
   resetCategoryButtonsUI();
