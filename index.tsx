@@ -563,6 +563,7 @@ let showOnlySp: boolean = false;
 let showOnlyPbp: boolean = false;
 let showOnlyProject: boolean = false;
 let isMacroView: boolean = false;
+let chartGroupBy: "lot" | "po" = "lot";
 let overallChart: any = null;
 let lotChart: any = null;
 let modelChart: any = null;
@@ -1960,10 +1961,26 @@ function renderCharts(data: DeliveryRow[]) {
         </div>
 
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:col-span-1 xl:col-span-4 overflow-hidden relative">
-          <button id="toggle-macro-view-btn" class="absolute top-4 right-4 text-xs font-bold bg-slate-50 text-slate-500 hover:text-blue-600 px-2 py-1 flex items-center justify-center rounded hover:bg-slate-100 transition border border-slate-200 shadow-sm z-10" title="Toggle Macro View">
-            <i class="fas fa-layer-group mr-1"></i> Macro View
-          </button>
-          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 text-center" data-i18n="chartsLotProgressTitle">${t("chartsLotProgressTitle")}</h3>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
+             <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200" id="charts-group-progress-title">
+               ${chartGroupBy === 'lot' ? t("chartsLotProgressTitle") : "Progresso por PO SAP"}
+             </h3>
+             <div class="flex items-center gap-2">
+                <!-- Group By Selector -->
+                <div class="inline-flex rounded-md shadow-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-0.5">
+                  <button id="group-by-lot-btn" type="button" class="text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer ${chartGroupBy === 'lot' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm border border-slate-200/50 dark:border-slate-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'}">
+                    Lote
+                  </button>
+                  <button id="group-by-po-btn" type="button" class="text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer ${chartGroupBy === 'po' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm border border-slate-200/50 dark:border-slate-600' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'}">
+                    PO SAP
+                  </button>
+                </div>
+                
+                <button id="toggle-macro-view-btn" type="button" class="text-xs font-bold bg-slate-50 text-slate-500 hover:text-blue-600 px-2.5 py-1.5 flex items-center justify-center rounded hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition border border-slate-200 dark:border-slate-600 shadow-sm" title="Toggle Macro View">
+                  <i class="fas fa-layer-group mr-1"></i> Macro View
+                </button>
+             </div>
+          </div>
           <div class="relative h-64 w-full cursor-grab active:cursor-grabbing overflow-x-auto pb-2">
              <div style="min-width: 800px; height: 100%;">
                 <canvas id="lotChartCanvas"></canvas>
@@ -2016,6 +2033,21 @@ function renderCharts(data: DeliveryRow[]) {
     });
   }
 
+  const lotBtn = document.getElementById("group-by-lot-btn");
+  const poBtn = document.getElementById("group-by-po-btn");
+  if (lotBtn) {
+    lotBtn.addEventListener("click", () => {
+      chartGroupBy = "lot";
+      renderCharts(data);
+    });
+  }
+  if (poBtn) {
+    poBtn.addEventListener("click", () => {
+      chartGroupBy = "po";
+      renderCharts(data);
+    });
+  }
+
   const ctxOverall = document.getElementById("overallChartCanvas") as HTMLCanvasElement;
   if (ctxOverall) {
     overallChart = new Chart(ctxOverall, {
@@ -2049,40 +2081,45 @@ function renderCharts(data: DeliveryRow[]) {
     });
   }
 
-  const lotStats: Record<string, { total: number; done: number; statusCounts: number[]; carriers: Set<string>; operations: Set<string> }> = {};
+  const groupStats: Record<string, { total: number; done: number; statusCounts: number[]; carriers: Set<string>; operations: Set<string> }> = {};
   data.forEach((row) => {
-    const lot = String(row["LOT"] || "N/A");
-    if (!lotStats[lot]) lotStats[lot] = { total: 0, done: 0, statusCounts: [0,0,0,0,0], carriers: new Set(), operations: new Set() };
-    lotStats[lot].total++;
+    const rawVal = chartGroupBy === "lot" ? row["LOT"] : row["PO SAP"];
+    const key = String(rawVal || "N/A").trim() || "N/A";
+    if (!groupStats[key]) groupStats[key] = { total: 0, done: 0, statusCounts: [0,0,0,0,0,0,0], carriers: new Set(), operations: new Set() };
+    groupStats[key].total++;
     const status = normalizeText(row["STATUS"] || "PENDENTE");
-    if (status === "ENTREGUE") lotStats[lot].done++;
-    lotStats[lot].statusCounts[getStatusIndex(status)]++;
+    if (status === "ENTREGUE") groupStats[key].done++;
+    groupStats[key].statusCounts[getStatusIndex(status)]++;
     const carrier = String(row["TRANSPORTATION COMPANY"] || "").trim().toUpperCase();
-    if (carrier) lotStats[lot].carriers.add(carrier);
+    if (carrier) groupStats[key].carriers.add(carrier);
     let operation = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
     if (operation) {
       if (operation.includes("UNLOAD") || operation.includes("DESOVA")) operation = "UNLOAD";
       else if (operation.includes("SWAP")) operation = "SWAP";
-      lotStats[lot].operations.add(operation);
+      groupStats[key].operations.add(operation);
     }
   });
 
-  const sortedLots = Object.keys(lotStats).sort();
-  const lotLabels = sortedLots;
+  const sortedGroups = Object.keys(groupStats).sort((a, b) => {
+    if (a === "N/A") return 1;
+    if (b === "N/A") return -1;
+    return a.localeCompare(b, undefined, { numeric: true });
+  });
+  const groupLabels = sortedGroups;
 
   const ctxLot = document.getElementById("lotChartCanvas") as HTMLCanvasElement;
   if (ctxLot) {
-    const minW = Math.max(800, lotLabels.length * 40);
+    const minW = Math.max(800, groupLabels.length * 45);
     ctxLot.parentElement!.style.minWidth = `${minW}px`;
     
     let chartData, chartOptions;
 
     if (isMacroView) {
       chartData = {
-        labels: lotLabels,
+        labels: groupLabels,
         datasets: statusLabels.map((lbl, idx) => ({
           label: lbl,
-          data: sortedLots.map(lot => lotStats[lot].statusCounts[idx]),
+          data: sortedGroups.map(grp => groupStats[grp].statusCounts[idx]),
           backgroundColor: Object.values(statusColors)[idx]
         }))
       };
@@ -2109,11 +2146,12 @@ function renderCharts(data: DeliveryRow[]) {
             cornerRadius: 8,
             callbacks: {
               title: (items: any) => {
-                return items[0].label;
+                const label = items[0].label;
+                return (chartGroupBy === "lot" ? "Lote: " : "PO SAP: ") + label;
               },
               afterBody: (items: any) => {
-                const lot = items[0].label;
-                const stats = lotStats[lot];
+                const grp = items[0].label;
+                const stats = groupStats[grp];
                 const carriers = Array.from(stats.carriers || []).join(", ") || "N/A";
                 const ops = Array.from(stats.operations || []).join(", ") || "N/A";
                 return `\nTransportadora: ${carriers}\nEscopo da Operação: ${ops}`;
@@ -2126,13 +2164,13 @@ function renderCharts(data: DeliveryRow[]) {
         }
       };
     } else {
-      const lotData = sortedLots.map((lot) => lotStats[lot].total > 0 ? (lotStats[lot].done / lotStats[lot].total) * 100 : 0);
+      const groupData = sortedGroups.map((grp) => groupStats[grp].total > 0 ? (groupStats[grp].done / groupStats[grp].total) * 100 : 0);
       chartData = {
-        labels: lotLabels,
+        labels: groupLabels,
         datasets: [{
           label: "% " + t("delivered"),
-          data: lotData,
-          backgroundColor: lotData.map(v => v === 100 ? "#22c55e" : "#3b82f6"),
+          data: groupData,
+          backgroundColor: groupData.map(v => v === 100 ? "#22c55e" : "#3b82f6"),
           borderRadius: 4
         }]
       };
@@ -2147,6 +2185,25 @@ function renderCharts(data: DeliveryRow[]) {
           legend: { display: false },
           datalabels: {
             formatter: (value: number) => value > 0 ? value.toFixed(0) + '%' : ''
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            titleFont: { size: 14, weight: 'bold' },
+            padding: 12,
+            cornerRadius: 8,
+            callbacks: {
+              title: (items: any) => {
+                const label = items[0].label;
+                return (chartGroupBy === "lot" ? "Lote: " : "PO SAP: ") + label;
+              },
+              afterBody: (items: any) => {
+                const grp = items[0].label;
+                const stats = groupStats[grp];
+                const carriers = Array.from(stats.carriers || []).join(", ") || "N/A";
+                const ops = Array.from(stats.operations || []).join(", ") || "N/A";
+                return `\nQuantidade total: ${stats.total}\nEntregue: ${stats.done}\nTransportadora: ${carriers}\nEscopo da Operação: ${ops}`;
+              }
+            }
           }
         }
       };
