@@ -235,3 +235,13 @@ tbody tr.is-battery:hover {
 #confirmation-modal {
     transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
+
+/* --- Scrollbar Utilities --- */
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
