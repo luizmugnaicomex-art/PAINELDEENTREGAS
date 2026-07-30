@@ -731,9 +731,6 @@ function listenForRealtimeUpdates() {
             (window as any).__PARETO_REASONS__ = data.paretoReasons;
           }
 
-          activeStatusFilter = null;
-          if (searchInput) searchInput.value = "";
-
           if (data.companyLogo && typeof data.companyLogo === "string") {
             localStorage.setItem("companyLogo", data.companyLogo);
             companyLogo.src = data.companyLogo;
