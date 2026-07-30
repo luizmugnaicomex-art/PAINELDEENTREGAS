@@ -1447,7 +1447,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
             ${deliveries
               .map((row, rowIndex) => {
                 const status = normalizeText(row["STATUS"] || "PENDENTE") || "PENDENTE";
-                const pareto = row["PARETO"] || "Pendente";
+                const pareto = row["PARETO"] || "-";
                 const isBattery = isBatteryRow(row);
                 const isKd = isKdRow(row);
                 const isSp = isSpRow(row);
@@ -1486,7 +1486,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                   <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 font-medium">${row["LOT"] || "-"}</td>
                   <td class="px-4 py-3 text-xs" onclick="event.stopPropagation()">
                     <select class="pareto-select bg-white dark:bg-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-500 text-xs rounded-md p-1 w-full" data-row-id="${row._id}">
-                      <option value="Pendente" ${pareto === "Pendente" ? "selected" : ""}>Pendente</option>
+                      <option value="-" ${pareto === "-" ? "selected" : ""}>-</option>
                       ${(window as any).__PARETO_REASONS__ ? (window as any).__PARETO_REASONS__.map((opt: string) => `<option value="${opt}" ${pareto === opt ? "selected" : ""}>${opt}</option>`).join("") : [
                         "PRAZO CURTO PARA COLETA",
                         "QUEBRA DE VEÍCULO",
@@ -1670,7 +1670,7 @@ deliveryContent?.addEventListener("change", async (e) => {
     if (!row) return;
 
     const next = paretoSelect.value;
-    const prev = row["PARETO"] || "Pendente";
+    const prev = row["PARETO"] || "-";
     if (next === prev) return;
 
     row["PARETO"] = next;
@@ -3594,7 +3594,7 @@ function renderParetoTab() {
 
   filteredData.forEach(row => {
     const pareto = String(row["PARETO"] || "").trim().toUpperCase();
-    if (pareto && pareto !== "PENDENTE") {
+    if (pareto && pareto !== "-") {
       const d = toDateMaybe(row["DELIVERY AT BYD"]);
       const dateKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : t("undefinedDate");
       const carrier = String(row["TRANSPORTATION COMPANY"] || "").trim().toUpperCase() || "DESCONHECIDO";
