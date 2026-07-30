@@ -9,19 +9,11 @@
  * - Sanitizes Excel error strings (#REF!, #N/A, etc.)
  * - Keeps stable row id (_id) so status updates won’t break after filtering/sorting
  * - Expanded Details panel with the extra columns present in your sheet
- * - Adds Daily Goal (150 on weekdays; weekends show goal as “bonus”) per date card
+ * - Adds Daily Goal (300 on weekdays; weekends show goal as “bonus”) per date card
  * - Fixed: Integrated Inventory and Operational Blog storage with online persistence (Firebase)
  * - Standardized BYD Corporate Minutes formatting layout for operational logs and reports
  */
 
-import { mountStorageInventory } from './StorageInventory';
-
-function renderInventory(data: any[]) {
-    const container = document.getElementById("inventory-content");
-    if (container) {
-        mountStorageInventory(container, data);
-    }
-}
 declare const firebase: any;
 declare const XLSX: any;
 declare const jspdf: any;
@@ -182,29 +174,8 @@ const translations = {
     performanceTitle: "Desempenho por Transportadora",
     badgeBattery: "Bateria",
     deliveriesTab: "Entregas",
-    arrivalsTab: "Chegadas por Lote",
     chartsTab: "Gráficos (Operação)",
     timeTab: "Tempo de Operação",
-    inventoryTab: "Estoque",
-    newsTab: "Diário de Operação",
-    newsBreaking: "ÚLTIMAS",
-    newsNewUpdate: "Nova Atualização",
-    newsNoPosts: "Nenhuma notícia postada ainda.",
-    newsWaiting: "Aguardando atualizações da operação...",
-    newsOlder: "Atualizações Anteriores",
-    newsStayConnected: "Fique Conectado",
-    newsEffTitle: "Eficiência Operacional",
-    newsTransitTitle: "Trânsito Ativo",
-    newsBacklogTitle: "Carga em Backlog",
-    newsLotJust: "Justificativas por Lote",
-    newsAddInfo: "Informações Adicionais",
-    newsSaveNotes: "Salvar Notas",
-    newsSaveAlerts: "Salvar Avisos",
-    newsPostNew: "Publicar Nova Atualização",
-    newsPublish: "Publicar História",
-    newsModalTitle: "Nova Atualização Editorial",
-    newsPostPhoto: "Capa do Post (Foto)",
-    newsClickToPhoto: "CLIQUE PARA ADICIONAR FOTO",
     modelsTitle: "Modelos",
     legendTitle: "Legenda",
     efic: "EFIC.",
@@ -231,12 +202,17 @@ const translations = {
     changeStatusFor: (containerId: string) => `Alterar status do container ${containerId || ""}`,
     viewDetailsFor: (containerId: string) => `Ver detalhes do container ${containerId || "sem identificação"}`,
     goalLabel: "Meta",
-    goalWeekday: "150/dia útil",
+    goalWeekday: "300/dia útil",
     goalWeekend: "Fim de semana (bônus)",
     reachedGoal: "Meta atingida",
     notReachedGoal: "Abaixo da meta",
     kpiGoal: (del: number, goal: number) => `${del}/${goal}`,
-    today: "Hoje"
+    today: "Hoje",
+    saveDayButton: "Fechar e Salvar Dia",
+    historyTab: "Histórico Mensal",
+    paretoTab: "Análise de Fenômeno - Paretos",
+    saveDayConfirmTitle: "Arquivar o dia atual?",
+    saveDayConfirmMsg: "Isso salvará a programação atual no histórico mensal e limpará o painel para a nova planilha do dia seguinte. Continuar?"
   },
   "en-US": {
     pageTitle: "KD Monitor Dashboard",
@@ -326,29 +302,8 @@ const translations = {
     performanceTitle: "Carrier Performance",
     badgeBattery: "Battery",
     deliveriesTab: "Deliveries",
-    arrivalsTab: "Arrivals per Lot",
     chartsTab: "Charts (Operation)",
     timeTab: "Operation Time",
-    inventoryTab: "Inventory",
-    newsTab: "Operation Blog",
-    newsBreaking: "BREAKING",
-    newsNewUpdate: "New Update",
-    newsNoPosts: "No news posted yet.",
-    newsWaiting: "Waiting for operation updates...",
-    newsOlder: "Older Updates",
-    newsStayConnected: "Stay Connected",
-    newsEffTitle: "Operation Efficiency",
-    newsTransitTitle: "Active Transit",
-    newsBacklogTitle: "Backlog Load",
-    newsLotJust: "Lot Justifications",
-    newsAddInfo: "Additional Information",
-    newsSaveNotes: "Save Notes",
-    newsSaveAlerts: "Save Notices",
-    newsPostNew: "Post New Update",
-    newsPublish: "Publish Story",
-    newsModalTitle: "Post New Editorial Update",
-    newsPostPhoto: "Post Cover (Photo)",
-    newsClickToPhoto: "CLICK TO ADD PHOTO",
     modelsTitle: "Models",
     legendTitle: "Legend",
     efic: "EFFIC.",
@@ -374,12 +329,17 @@ const translations = {
     changeStatusFor: (containerId: string) => `Change status for container ${containerId || ""}`,
     viewDetailsFor: (containerId: string) => `View details for container ${containerId || "unidentified"}`,
     goalLabel: "Goal",
-    goalWeekday: "150/weekday",
+    goalWeekday: "300/weekday",
     goalWeekend: "Weekend (bonus)",
     reachedGoal: "Goal reached",
     notReachedGoal: "Below goal",
     kpiGoal: (del: number, goal: number) => `${del}/${goal}`,
-    today: "Today"
+    today: "Today",
+    saveDayButton: "Save End of Day",
+    historyTab: "Monthly History",
+    paretoTab: "Phenomenon Analysis - Pareto",
+    saveDayConfirmTitle: "Archive Current Day?",
+    saveDayConfirmMsg: "This will save the current schedule to the monthly history and clear the dashboard for the new day's upload. Continue?"
   },
   "zh-CN": {
     pageTitle: "KD 监控仪表板",
@@ -469,29 +429,8 @@ const translations = {
     performanceTitle: "承运人绩效",
     badgeBattery: "电池",
     deliveriesTab: "交货",
-    arrivalsTab: "每批到达",
     chartsTab: "图表（运营）",
     timeTab: "运营时间",
-    inventoryTab: "库存",
-    newsTab: "运营日志",
-    newsBreaking: "快讯",
-    newsNewUpdate: "新增更新",
-    newsNoPosts: "尚无发布消息。",
-    newsWaiting: "正在等待运营更新...",
-    newsOlder: "历史更新",
-    newsStayConnected: "保持关注",
-    newsEffTitle: "运营效率",
-    newsTransitTitle: "在途运输",
-    newsBacklogTitle: "积压负荷",
-    newsLotJust: "各批次说明",
-    newsAddInfo: "附加信息",
-    newsSaveNotes: "保存笔记",
-    newsSaveAlerts: "保存通知",
-    newsPostNew: "发布新动态",
-    newsPublish: "发布故事",
-    newsModalTitle: "发布新编辑更新",
-    newsPostPhoto: "文章封面 (照片)",
-    newsClickToPhoto: "点击添加照片",
     modelsTitle: "型号",
     legendTitle: "图例",
     efic: "效率",
@@ -517,12 +456,17 @@ const translations = {
     changeStatusFor: (containerId: string) => `更改集装箱 ${containerId || ""} 的状态`,
     viewDetailsFor: (containerId: string) => `查看集装箱 ${containerId || "未识别"} 的详细信息`,
     goalLabel: "目标",
-    goalWeekday: "工作日150",
+    goalWeekday: "工作日300",
     goalWeekend: "周末（加分）",
     reachedGoal: "已达目标",
     notReachedGoal: "未达目标",
     kpiGoal: (del: number, goal: number) => `${del}/${goal}`,
-    today: "今天"
+    today: "今天",
+    saveDayButton: "保存当天 (Save Day)",
+    historyTab: "历史记录",
+    paretoTab: "现象分析 - 帕累托",
+    saveDayConfirmTitle: "归档当天数据？",
+    saveDayConfirmMsg: "这会将当前计划保存到月度历史记录，并清空仪表板以便上传新一天的计划。是否继续？"
   },
 };
 
@@ -552,9 +496,8 @@ type DeliveryRow = Record<string, any> & {
 };
 
 let deliveryData: DeliveryRow[] = [];
-let blogPosts: BlogPost[] = [];
-let lotJustifications: Record<string, string> = {};
-let generalNotes: string = "";
+let historicalData: DeliveryRow[] = [];
+let dailyCarrierNotes: Record<string, Record<string, { motivo: string, impacto: string }>> = {};
 let searchDebounceTimer: number;
 let activeStatusFilter: string | null = null;
 let showOnlyBattery: boolean = false;
@@ -566,7 +509,12 @@ let isMacroView: boolean = false;
 let chartGroupBy: "lot" | "po" = "lot";
 let overallChart: any = null;
 let lotChart: any = null;
+let maxLotChart: any = null;
 let modelChart: any = null;
+let historyDailyChart: any = null;
+let historyWeeklyChart: any = null;
+let selectedHistoryDate: string | null = null;
+let selectedHistoryWeek: string | null = null;
 let carrierCharts: any[] = [];
 let warehouseCharts: any[] = [];
 
@@ -721,24 +669,15 @@ logoUpload?.addEventListener("change", handleLogoUpload);
 /* --------------------------- FIREBASE INTEGRATION -------------------------- */
 let isUpdatingFromFirebase = false;
 
-export type BlogPost = {
-  id: string;
-  title: string;
-  text: string;
-  image?: string;
-  category: string;
-  author: string;
-  createdAt: any;
-};
 
 type FirebaseState = {
   deliveryData?: DeliveryRow[];
+  historicalData?: DeliveryRow[];
   lastUpdate?: any; // Firestore Timestamp
   lastUpdateSheetName?: string;
   companyLogo?: string;
-  blogPosts?: BlogPost[];
-  lotJustifications?: Record<string, string>;
-  generalNotes?: string;
+  dailyCarrierNotes?: Record<string, Record<string, { motivo: string, impacto: string }>>;
+  paretoReasons?: string[];
 };
 
 const FIREBASE_COLLECTION = "delivery_dashboard";
@@ -750,9 +689,19 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
   try {
     const stateToSave: FirebaseState = {
       deliveryData,
-      blogPosts,
-      lotJustifications,
-      generalNotes,
+      historicalData,
+      dailyCarrierNotes,
+      paretoReasons: (window as any).__PARETO_REASONS__ || [
+        "PRAZO CURTO PARA COLETA",
+        "QUEBRA DE VEÍCULO",
+        "INCIDENTE TERMINAL",
+        "GREVE DOS CAMINHONEIROS",
+        "GREVE SINDICAL",
+        "ALTERAÇÃO DE PROGRAMAÇÃO",
+        "ACIDENTE NA RODOVIA",
+        "FILA NO TERMINAL",
+        "PENDÊNCIA DOCUMENTAL"
+      ],
       lastUpdate: new Date(),
       lastUpdateSheetName: lastUpdate?.dataset?.sheetName || "",
       companyLogo: localStorage.getItem("companyLogo") || "",
@@ -775,9 +724,13 @@ function listenForRealtimeUpdates() {
         if (docSnap.exists) {
           const data: FirebaseState = docSnap.data() || {};
           deliveryData = Array.isArray(data.deliveryData) ? data.deliveryData : [];
-          blogPosts = Array.isArray(data.blogPosts) ? data.blogPosts : [];
-          lotJustifications = data.lotJustifications || {};
-          generalNotes = data.generalNotes || "";
+          historicalData = Array.isArray(data.historicalData) ? data.historicalData : [];
+          dailyCarrierNotes = data.dailyCarrierNotes || {};
+          
+          if (Array.isArray(data.paretoReasons)) {
+            (window as any).__PARETO_REASONS__ = data.paretoReasons;
+          }
+
           activeStatusFilter = null;
           if (searchInput) searchInput.value = "";
 
@@ -1005,19 +958,32 @@ function isWeekend(d: Date): boolean {
   return day === 0 || day === 6;
 }
 
-const WEEKDAY_GOAL = 150;
+const WEEKDAY_GOAL = 300;
 
 /* ------------------------------- UI CORE ---------------------------------- */
 function resetUI() {
-  placeholder?.classList.remove("hidden");
-  deliveryDashboard?.classList.add("hidden");
-  summaryStats?.classList.add("hidden");
-  lotSearchContainer?.classList.add("hidden");
-  exportExcelBtn?.classList.add("hidden");
-  exportPdfBtn?.classList.add("hidden");
-  if (deliveryTabs) deliveryTabs.innerHTML = "";
-  if (deliveryContent) deliveryContent.innerHTML = "";
-  if (lastUpdate) lastUpdate.textContent = t("uploadPrompt");
+  if (deliveryData.length === 0 && historicalData.length === 0) {
+    placeholder?.classList.remove("hidden");
+    deliveryDashboard?.classList.add("hidden");
+    summaryStats?.classList.add("hidden");
+    lotSearchContainer?.classList.add("hidden");
+    exportExcelBtn?.classList.add("hidden");
+    exportPdfBtn?.classList.add("hidden");
+    if (deliveryTabs) deliveryTabs.innerHTML = "";
+    if (deliveryContent) deliveryContent.innerHTML = "";
+    if (lastUpdate) lastUpdate.textContent = t("uploadPrompt");
+  } else if (deliveryData.length === 0 && historicalData.length > 0) {
+    // We have history but no active delivery data.
+    placeholder?.classList.add("hidden");
+    deliveryDashboard?.classList.remove("hidden");
+    summaryStats?.classList.remove("hidden");
+    
+    // Switch to history tab visually if not already
+    const histBtn = document.querySelector(".view-tab-btn[data-tab='history']") as HTMLElement;
+    if (histBtn) histBtn.click();
+    
+    applyFiltersAndRender();
+  }
 }
 
 function isBatteryRow(row: any): boolean {
@@ -1148,14 +1114,15 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   }
 
   renderDeliveryDashboard(filteredData, activeTabId);
-  renderArrivalsTable();
   renderCharts(filteredData);
-  renderInventory(filteredData);
+  renderHistoryTab();
   updateStats();
 }
 
 function updateStats() {
-  let dataForStats = deliveryData;
+  const isHistoryTabActive = document.querySelector(".view-tab-btn[data-tab='history']")?.classList.contains("border-blue-500") ?? false;
+  let dataForStats = isHistoryTabActive ? historicalData : deliveryData;
+
   if (showOnlyBattery) {
     dataForStats = dataForStats.filter(row => isBatteryRow(row));
   }
@@ -1475,6 +1442,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
               <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderVessel")}</th>
               <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderWarehouse")}</th>
               <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase">${t("tableHeaderLot")}</th>
+              <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase w-40">Pareto</th>
               <th class="px-4 py-2 text-left text-slate-500 text-xs uppercase w-40">${t("tableHeaderStatus")}</th>
             </tr>
           </thead>
@@ -1482,6 +1450,7 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
             ${deliveries
               .map((row, rowIndex) => {
                 const status = normalizeText(row["STATUS"] || "PENDENTE") || "PENDENTE";
+                const pareto = row["PARETO"] || "Pendente";
                 const isBattery = isBatteryRow(row);
                 const isKd = isKdRow(row);
                 const isSp = isSpRow(row);
@@ -1518,7 +1487,23 @@ function renderDeliveryDashboard(data: DeliveryRow[], activeTabId: string | null
                   <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">${row["VESSEL"] || "-"}</td>
                   <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">${row["BONDED WAREHOUSE"] || "-"}</td>
                   <td class="px-4 py-3 text-xs text-slate-600 dark:text-slate-300 font-medium">${row["LOT"] || "-"}</td>
-                  <td class="px-4 py-3 text-xs">
+                  <td class="px-4 py-3 text-xs" onclick="event.stopPropagation()">
+                    <select class="pareto-select bg-white dark:bg-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-500 text-xs rounded-md p-1 w-full" data-row-id="${row._id}">
+                      <option value="Pendente" ${pareto === "Pendente" ? "selected" : ""}>Pendente</option>
+                      ${(window as any).__PARETO_REASONS__ ? (window as any).__PARETO_REASONS__.map((opt: string) => `<option value="${opt}" ${pareto === opt ? "selected" : ""}>${opt}</option>`).join("") : [
+                        "PRAZO CURTO PARA COLETA",
+                        "QUEBRA DE VEÍCULO",
+                        "INCIDENTE TERMINAL",
+                        "GREVE DOS CAMINHONEIROS",
+                        "GREVE SINDICAL",
+                        "ALTERAÇÃO DE PROGRAMAÇÃO",
+                        "ACIDENTE NA RODOVIA",
+                        "FILA NO TERMINAL",
+                        "PENDÊNCIA DOCUMENTAL"
+                      ].map(opt => `<option value="${opt}" ${pareto === opt ? "selected" : ""}>${opt}</option>`).join("")}
+                    </select>
+                  </td>
+                  <td class="px-4 py-3 text-xs" onclick="event.stopPropagation()">
                     <select class="status-select bg-white dark:bg-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-500 text-xs rounded-md p-1 w-full" data-row-id="${row._id}">
                       ${["PENDENTE", "AGUARDANDO DESOVA", "A CAMINHO", "ADIADO", "BACKLOG", "ENTREGUE", "CANCELADO"]
                         .map((opt) => `<option value="${opt}" ${status === opt ? "selected" : ""}>${t(statusKeyMap[opt])}</option>`)
@@ -1678,9 +1663,29 @@ function sanitizeStatus(raw: any): string {
 }
 
 deliveryContent?.addEventListener("change", async (e) => {
-  const select = (e.target as HTMLElement).closest<HTMLSelectElement>(".status-select");
-  if (!select) return;
+  const target = e.target as HTMLElement;
+  const statusSelect = target.closest<HTMLSelectElement>(".status-select");
+  const paretoSelect = target.closest<HTMLSelectElement>(".pareto-select");
+  
+  if (paretoSelect) {
+    const rowId = paretoSelect.dataset.rowId || "";
+    const row = deliveryData.find((d) => d._id === rowId);
+    if (!row) return;
 
+    const next = paretoSelect.value;
+    const prev = row["PARETO"] || "Pendente";
+    if (next === prev) return;
+
+    row["PARETO"] = next;
+    showToast(`Motivo Pareto atualizado para ${next}`, "success");
+    await saveStateToFirebase();
+    applyFiltersAndRender();
+    return;
+  }
+
+  if (!statusSelect) return;
+
+  const select = statusSelect;
   const rowId = select.dataset.rowId || "";
   const row = deliveryData.find((d) => d._id === rowId);
   if (!row) return;
@@ -1715,32 +1720,29 @@ viewModeTabs?.addEventListener("click", (e) => {
     const target = btn.dataset.tab;
     deliveriesWrapper?.classList.toggle("hidden", target !== "deliveries");
     
-    const arrivalsContent = document.getElementById("arrivals-content");
-    arrivalsContent?.classList.toggle("hidden", target !== "arrivals");
-    
     const chartsContent = document.getElementById("charts-content");
     chartsContent?.classList.toggle("hidden", target !== "charts");
     
     const timeContent = document.getElementById("time-content");
     timeContent?.classList.toggle("hidden", target !== "time");
-
-    const inventoryContent = document.getElementById("inventory-content");
-    inventoryContent?.classList.toggle("hidden", target !== "inventory");
-
-    const newsContent = document.getElementById("news-content");
-    newsContent?.classList.toggle("hidden", target !== "news");
     
-    if (target === "arrivals") {
-      renderArrivalsTable();
-    } else if (target === "charts") {
+    const historyContent = document.getElementById("history-content");
+    historyContent?.classList.toggle("hidden", target !== "history");
+
+    const paretoContent = document.getElementById("pareto-content");
+    paretoContent?.classList.toggle("hidden", target !== "pareto");
+
+    if (target === "charts") {
       renderCharts(deliveryData);
     } else if (target === "time") {
       renderTimeTable(deliveryData);
-    } else if (target === "inventory") {
-      renderInventory(deliveryData);
-    } else if (target === "news") {
-      renderNewsTab(deliveryData);
+    } else if (target === "history") {
+      renderHistoryTab();
+    } else if (target === "pareto") {
+      renderParetoTab();
     }
+
+    updateStats();
   }
 });
 
@@ -1979,9 +1981,13 @@ function renderCharts(data: DeliveryRow[]) {
                 <button id="toggle-macro-view-btn" type="button" class="text-xs font-bold bg-slate-50 text-slate-500 hover:text-blue-600 px-2.5 py-1.5 flex items-center justify-center rounded hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition border border-slate-200 dark:border-slate-600 shadow-sm" title="Toggle Macro View">
                   <i class="fas fa-layer-group mr-1"></i> Macro View
                 </button>
+                
+                <button id="maximize-chart-btn" type="button" class="text-xs font-bold bg-slate-50 text-slate-500 hover:text-blue-600 px-2.5 py-1.5 flex items-center justify-center rounded hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition border border-slate-200 dark:border-slate-600 shadow-sm cursor-pointer" title="Maximizar Visualização">
+                  <i class="fas fa-expand mr-1"></i> Maximizar
+                </button>
              </div>
           </div>
-          <div class="relative h-64 w-full cursor-grab active:cursor-grabbing overflow-x-auto pb-2">
+          <div class="relative h-64 w-full cursor-grab active:cursor-grabbing overflow-x-auto pb-2 custom-scrollbar">
              <div style="min-width: 800px; height: 100%;">
                 <canvas id="lotChartCanvas"></canvas>
              </div>
@@ -2046,6 +2052,46 @@ function renderCharts(data: DeliveryRow[]) {
       chartGroupBy = "po";
       renderCharts(data);
     });
+  }
+
+  const maximizeBtn = document.getElementById("maximize-chart-btn");
+  if (maximizeBtn) {
+    maximizeBtn.addEventListener("click", () => {
+      const maxContainer = document.getElementById("chart-max-modal-container");
+      const maxModal = document.getElementById("chart-max-modal");
+      if (maxContainer && maxModal) {
+        maxContainer.classList.remove("hidden");
+        setTimeout(() => {
+          maxModal.classList.remove("scale-95", "opacity-0");
+          maxModal.classList.add("scale-100", "opacity-100");
+          renderCharts(data);
+        }, 10);
+      }
+    });
+  }
+
+  // Handle modal close buttons statically using onclick
+  const maxCloseBtn = document.getElementById("chart-max-close-btn");
+  const maxContainer = document.getElementById("chart-max-modal-container");
+  const maxModal = document.getElementById("chart-max-modal");
+  if (maxCloseBtn && maxContainer && maxModal) {
+    const closeModal = () => {
+      maxModal.classList.add("scale-95", "opacity-0");
+      maxModal.classList.remove("scale-100", "opacity-100");
+      setTimeout(() => {
+        maxContainer.classList.add("hidden");
+        if (maxLotChart) {
+          maxLotChart.destroy();
+          maxLotChart = null;
+        }
+      }, 200);
+    };
+    maxCloseBtn.onclick = closeModal;
+    maxContainer.onclick = (e) => {
+      if (e.target === maxContainer) {
+        closeModal();
+      }
+    };
   }
 
   const ctxOverall = document.getElementById("overallChartCanvas") as HTMLCanvasElement;
@@ -2210,6 +2256,88 @@ function renderCharts(data: DeliveryRow[]) {
     }
 
     lotChart = new Chart(ctxLot, { type: "bar", data: chartData as any, options: chartOptions as any });
+    
+    // --- Maximized Chart Render & Sync ---
+    const maxContainer = document.getElementById("chart-max-modal-container");
+    const ctxMaxLot = document.getElementById("maxLotChartCanvas") as HTMLCanvasElement;
+    if (maxContainer && !maxContainer.classList.contains("hidden") && ctxMaxLot) {
+      const maxMinW = Math.max(1000, groupLabels.length * 60);
+      ctxMaxLot.parentElement!.style.minWidth = `${maxMinW}px`;
+
+      const maxTitle = document.getElementById("max-chart-title");
+      if (maxTitle) {
+        maxTitle.textContent = chartGroupBy === "lot" ? t("chartsLotProgressTitle") : "Progresso por PO SAP";
+      }
+
+      // Sync active button styles in modal
+      const modalLotBtn = document.getElementById("modal-group-by-lot-btn");
+      const modalPoBtn = document.getElementById("modal-group-by-po-btn");
+      const modalToggleBtn = document.getElementById("modal-toggle-macro-view-btn");
+
+      if (modalLotBtn && modalPoBtn) {
+        const activeClass = "text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer bg-white dark:bg-slate-700 text-blue-600 shadow-sm border border-slate-200/50 dark:border-slate-600";
+        const inactiveClass = "text-[10px] font-bold px-2 py-1 rounded transition-all cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200";
+        if (chartGroupBy === "lot") {
+          modalLotBtn.className = activeClass;
+          modalPoBtn.className = inactiveClass;
+        } else {
+          modalLotBtn.className = inactiveClass;
+          modalPoBtn.className = activeClass;
+        }
+      }
+
+      if (modalToggleBtn) {
+        if (isMacroView) {
+          modalToggleBtn.classList.add("bg-blue-50", "text-blue-600");
+        } else {
+          modalToggleBtn.classList.remove("bg-blue-50", "text-blue-600");
+        }
+      }
+
+      const modalLegendContainer = document.getElementById("modal-macro-legend-container");
+      if (modalLegendContainer) {
+        if (isMacroView) {
+          modalLegendContainer.classList.remove("hidden");
+          modalLegendContainer.innerHTML = statusLabels.map((lbl, idx) => `
+            <div class="flex items-center text-[10px] font-bold text-slate-500">
+              <span class="w-3 h-3 rounded-sm mr-2" style="background-color: ${Object.values(statusColors)[idx]}"></span>
+              ${lbl}
+            </div>
+          `).join('');
+        } else {
+          modalLegendContainer.classList.add("hidden");
+        }
+      }
+
+      if (maxLotChart) {
+        maxLotChart.destroy();
+      }
+      maxLotChart = new Chart(ctxMaxLot, { type: "bar", data: chartData as any, options: chartOptions as any });
+
+      // Listeners for buttons inside modal (using onclick to avoid duplication)
+      const maxLotBtn = document.getElementById("modal-group-by-lot-btn");
+      const maxPoBtn = document.getElementById("modal-group-by-po-btn");
+      const maxToggleBtn = document.getElementById("modal-toggle-macro-view-btn");
+
+      if (maxLotBtn) {
+        maxLotBtn.onclick = () => {
+          chartGroupBy = "lot";
+          renderCharts(data);
+        };
+      }
+      if (maxPoBtn) {
+        maxPoBtn.onclick = () => {
+          chartGroupBy = "po";
+          renderCharts(data);
+        };
+      }
+      if (maxToggleBtn) {
+        maxToggleBtn.onclick = () => {
+          isMacroView = !isMacroView;
+          renderCharts(data);
+        };
+      }
+    }
   }
 
   const modelStats: Record<string, number> = {};
@@ -2302,367 +2430,573 @@ function renderCharts(data: DeliveryRow[]) {
   }
 }
 
-/* --------------------------------- BLOG ----------------------------------- */
-function renderNewsTab(data: DeliveryRow[]) {
-  const newsContent = document.getElementById("news-content");
-  if (!newsContent) return;
 
-  const sortedPosts = [...blogPosts].sort((a, b) => {
-    const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-    const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-    return dateB - dateA;
+/* ----------------------- ARRIVALS & METRICS ---------------------------- */
+function renderHistoryTab() {
+  const historyContent = document.getElementById("history-content");
+  if (!historyContent) return;
+
+  const activeElem = document.activeElement as HTMLElement;
+  const isTypingInHistory = activeElem?.classList.contains("history-note-input");
+  let activeData = { date: '', carrier: '', field: '', value: '' };
+  if (isTypingInHistory) {
+    activeData = {
+      date: activeElem.dataset.date || '',
+      carrier: activeElem.dataset.carrier || '',
+      field: activeElem.dataset.field || '',
+      value: (activeElem as HTMLInputElement).value
+    };
+  }
+
+  if (historicalData.length === 0) {
+    historyContent.innerHTML = `<div class="text-center py-20 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+      <i class="fas fa-archive text-6xl text-slate-300 dark:text-slate-600 mb-4"></i>
+      <h2 class="text-2xl font-semibold text-slate-700 dark:text-slate-200">${t("noResultsTitle")}</h2>
+      <p class="text-slate-500 dark:text-slate-400 mt-2">Nenhum dado arquivado encontrado.</p>
+    </div>`;
+    return;
+  }
+
+  // Group historical data by Date
+  const groupedByDate = historicalData.reduce((acc, row) => {
+    const d = toDateMaybe(row["DELIVERY AT BYD"]);
+    const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : (String(row["DELIVERY AT BYD"] || "").trim() || t("undefinedDate"));
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(row);
+    return acc;
+  }, {} as Record<string, DeliveryRow[]>);
+
+  const sortedDatesAsc = Object.keys(groupedByDate).sort((a, b) => a.localeCompare(b));
+
+  const formatDateLabel = (dKey: string) => dKey === t("undefinedDate") ? dKey : dKey.split("-").reverse().join("/");
+
+  const getWeekLabel = (dateStr: string) => {
+    if (dateStr === t("undefinedDate")) return dateStr;
+    const d = new Date(dateStr + "T12:00:00");
+    if (isNaN(d.getTime())) return dateStr;
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const start = new Date(d);
+    start.setDate(diff);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return `${start.toLocaleDateString("pt-BR", {day: '2-digit', month: '2-digit'})} a ${end.toLocaleDateString("pt-BR", {day: '2-digit', month: '2-digit'})}`;
+  };
+
+  const weekLabels = sortedDatesAsc.map(getWeekLabel);
+  const uniqueWeeks = Array.from(new Set(weekLabels));
+  
+  if (!selectedHistoryWeek || !uniqueWeeks.includes(selectedHistoryWeek)) {
+    selectedHistoryWeek = uniqueWeeks[uniqueWeeks.length - 1]; // newest week
+  }
+
+  const datesInSelectedWeek = sortedDatesAsc.filter(d => getWeekLabel(d) === selectedHistoryWeek);
+
+  if (!selectedHistoryDate || !datesInSelectedWeek.includes(selectedHistoryDate)) {
+    selectedHistoryDate = datesInSelectedWeek[datesInSelectedWeek.length - 1] || sortedDatesAsc[sortedDatesAsc.length - 1];
+  }
+
+  const dailyItems = groupedByDate[selectedHistoryDate] || [];
+  
+  const dailyByCarrier = dailyItems.reduce((acc, row) => {
+    const c = String(row["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase();
+    if (!acc[c]) acc[c] = { programados: 0, entregues: 0, backlog: 0, motivos: new Set<string>() };
+    acc[c].programados++;
+    const status = normalizeText(row["STATUS"] || "");
+    if (status === "ENTREGUE") {
+      acc[c].entregues++;
+    } else {
+      acc[c].backlog++;
+      if (row["NOTES"] && String(row["NOTES"]).trim().length > 0) acc[c].motivos.add(String(row["NOTES"]).trim());
+    }
+    return acc;
+  }, {} as Record<string, { programados: number, entregues: number, backlog: number, motivos: Set<string> }>);
+
+  // For weekly, we aggregate over all items in the selected week
+  const weeklyItems = datesInSelectedWeek.flatMap(d => groupedByDate[d]);
+  
+  const weeklyByCarrier = weeklyItems.reduce((acc, row) => {
+    const c = String(row["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase();
+    if (!acc[c]) acc[c] = { programados: 0, entregues: 0, backlog: 0 };
+    acc[c].programados++;
+    const status = normalizeText(row["STATUS"] || "");
+    if (status === "ENTREGUE") {
+      acc[c].entregues++;
+    } else {
+      acc[c].backlog++;
+    }
+    return acc;
+  }, {} as Record<string, { programados: number, entregues: number, backlog: number }>);
+
+  const weeklyTrendData = datesInSelectedWeek.map(dateKey => {
+    const items = groupedByDate[dateKey] || [];
+    const total = items.length;
+    const delivered = items.filter(r => normalizeText(r["STATUS"] || "") === "ENTREGUE").length;
+    const perf = total > 0 ? (delivered / total) * 100 : 0;
+    return { date: dateKey, perf, total, delivered };
   });
 
-  const featuredPost = sortedPosts[0];
-  const secondaryPosts = sortedPosts.slice(1, 4);
-  const remainingPosts = sortedPosts.slice(4);
+  const dailyCarriers = Object.keys(dailyByCarrier).sort((a, b) => a.localeCompare(b));
+  const weeklyCarriers = Object.keys(weeklyByCarrier).sort((a, b) => a.localeCompare(b));
 
-  const total = data.length;
-  const delivered = data.filter(d => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
-  const transit = data.filter(d => normalizeText(d["STATUS"] || "") === "A CAMINHO").length;
-  const efficiency = total > 0 ? ((delivered / total) * 100).toFixed(1) : "0.0";
-  const uniqueLots = Array.from(new Set(data.map(d => String(d["LOT"] || "N/A")))).sort();
+  let dailyTotal = { programados: 0, entregues: 0, backlog: 0 };
+  dailyCarriers.forEach(c => {
+    dailyTotal.programados += dailyByCarrier[c].programados;
+    dailyTotal.entregues += dailyByCarrier[c].entregues;
+    dailyTotal.backlog += dailyByCarrier[c].backlog;
+  });
 
-  newsContent.innerHTML = `
-    <div class="bg-slate-50 dark:bg-slate-900/50 min-h-screen">
-      <div class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 py-1 px-4 mb-6">
-        <div class="max-w-7xl mx-auto flex items-center overflow-hidden">
-          <div class="bg-slate-900 text-white px-2 py-0.5 text-[10px] font-black uppercase tracking-widest mr-4 flex-shrink-0">${t("newsBreaking")}</div>
-          <div class="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
-            ${sortedPosts.length > 0 ? sortedPosts[0].title : t("newsWaiting")}
+  let weeklyTotal = { programados: 0, entregues: 0, backlog: 0 };
+  weeklyCarriers.forEach(c => {
+    weeklyTotal.programados += weeklyByCarrier[c].programados;
+    weeklyTotal.entregues += weeklyByCarrier[c].entregues;
+    weeklyTotal.backlog += weeklyByCarrier[c].backlog;
+  });
+
+  historyContent.innerHTML = `
+    <div class="flex flex-col gap-6 w-full" id="history-report-container">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+        <div class="flex items-center gap-4 flex-wrap flex-1">
+          <span class="text-sm font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap"><i class="fas fa-calendar-alt mr-2 text-blue-500"></i>FILTROS:</span>
+          
+          <select id="history-week-select" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 cursor-pointer font-medium">
+            ${uniqueWeeks.map(w => `<option value="${w}" ${w === selectedHistoryWeek ? 'selected' : ''}>Semana: ${w}</option>`).join("")}
+          </select>
+          
+          <span class="text-slate-300 dark:text-slate-600">|</span>
+          
+          <div class="flex flex-wrap gap-2" id="history-date-tabs">
+            ${datesInSelectedWeek.map(dateKey => {
+              const isSelected = dateKey === selectedHistoryDate;
+              const btnClass = isSelected 
+                ? "bg-blue-600 text-white border-blue-600 shadow-sm" 
+                : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600";
+              return `<button type="button" class="px-3 py-1.5 text-xs font-bold rounded border transition-colors cursor-pointer history-date-btn ${btnClass}" data-date="${dateKey}">${formatDateLabel(dateKey)}</button>`;
+            }).join('')}
           </div>
-          <div class="ml-auto flex gap-2">
-             <button id="add-news-btn" class="text-blue-600 hover:text-blue-700 font-black text-[10px] uppercase tracking-wider flex items-center">
-               <i class="fas fa-plus-circle mr-1"></i> ${t("newsNewUpdate")}
-             </button>
+        </div>
+        
+        <div class="flex gap-2">
+          <button id="delete-history-btn" class="flex-none bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold flex items-center transition-colors shadow-sm text-sm">
+            <i class="fas fa-trash-alt mr-2"></i> Excluir Data
+          </button>
+          <button id="export-history-pdf" class="flex-none bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold flex items-center transition-colors shadow-sm text-sm">
+            <i class="fas fa-file-pdf mr-2"></i> Exportar PDF
+          </button>
+        </div>
+      </div>
+      
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[400px]">
+          <div class="bg-slate-700 text-white font-bold text-center py-2 text-sm uppercase">DESEMPENHO DIÁRIO POR TRANSPORTADORA</div>
+          <div class="overflow-y-auto flex-1 custom-scrollbar">
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 sticky top-0 z-10">
+                 <tr>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Transportadora</th>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Programados</th>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Entregues</th>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Backlog</th>
+                   <th class="py-2 border-b dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Performance</th>
+                 </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                ${dailyCarriers.map(c => {
+                  const data = dailyByCarrier[c];
+                  const perf = data.programados > 0 ? ((data.entregues / data.programados) * 100).toFixed(1) + "%" : "0.0%";
+                  return `
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                      <td class="py-2 border-b border-r dark:border-slate-700 font-bold">${c}</td>
+                      <td class="py-2 border-b border-r dark:border-slate-700">${data.programados}</td>
+                      <td class="py-2 border-b border-r dark:border-slate-700">${data.entregues}</td>
+                      <td class="py-2 border-b border-r dark:border-slate-700">${data.backlog}</td>
+                      <td class="py-2 border-b dark:border-slate-700">${perf}</td>
+                    </tr>
+                  `;
+                }).join("")}
+                <tr class="bg-slate-100 dark:bg-slate-900 font-bold text-slate-800 dark:text-slate-200">
+                  <td class="py-2 border-t dark:border-slate-700 border-r">TOTAL</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.programados}</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.entregues}</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.backlog}</td>
+                  <td class="py-2 border-t dark:border-slate-700">${dailyTotal.programados > 0 ? ((dailyTotal.entregues / dailyTotal.programados) * 100).toFixed(1) + "%" : "0.0%"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[400px]">
+          <div class="bg-blue-600 text-white font-bold text-center py-2 text-sm uppercase">PROGRAMADOS X BACKLOG (DIÁRIO)</div>
+          <div class="p-4 flex-1 relative min-h-[300px]">
+             <canvas id="historyDailyChartCanvas"></canvas>
           </div>
         </div>
       </div>
-
-      <div class="max-w-7xl mx-auto px-4 pb-12">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div class="lg:col-span-8 flex flex-col gap-8">
-            ${featuredPost ? `
-              <div class="relative group cursor-pointer overflow-hidden rounded-2xl shadow-2xl bg-slate-200 aspect-[16/9] lg:aspect-[21/9]">
-                ${featuredPost.image ? `<img src="${featuredPost.image}" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110">` : `<div class="absolute inset-0 flex items-center justify-center bg-slate-800"><i class="fas fa-newspaper text-6xl text-slate-700"></i></div>`}
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
-                <div class="absolute bottom-0 left-0 p-8 w-full">
-                  <span class="bg-blue-600 text-white px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded mb-3 inline-block">${featuredPost.category || 'GENERAL'}</span>
-                  <h1 class="text-3xl lg:text-5xl font-black text-white leading-tight mb-4">${featuredPost.title}</h1>
-                  <p class="text-slate-200 text-sm mb-4 line-clamp-2">${featuredPost.text}</p>
-                  <div class="flex items-center text-slate-300 text-xs font-bold gap-4">
-                    <span><i class="fas fa-user-edit mr-1"></i> ${featuredPost.author || 'Supervisão'}</span>
-                    <span><i class="fas fa-clock mr-1"></i> ${featuredPost.createdAt?.toDate ? featuredPost.createdAt.toDate().toLocaleDateString() : (featuredPost.createdAt ? new Date(featuredPost.createdAt).toLocaleDateString() : t("today"))}</span>
-                  </div>
-                </div>
-                <button class="delete-post-btn absolute top-4 right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100" data-id="${featuredPost.id}">
-                  <i class="fas fa-trash-alt"></i>
-                </button>
-              </div>
-            ` : `
-              <div class="bg-white dark:bg-slate-800 p-20 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center">
-                 <i class="fas fa-newspaper text-5xl text-slate-300 mb-4 block"></i>
-                 <p class="text-slate-500 font-bold">${t("newsNoPosts")}</p>
-              </div>
-            `}
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              ${secondaryPosts.map(post => `
-                <div class="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-md border border-slate-100 dark:border-slate-700 group hover:shadow-xl transition-all">
-                  <div class="relative h-48 bg-slate-200 overflow-hidden">
-                    ${post.image ? `<img src="${post.image}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-all">` : `<div class="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-900"><i class="fas fa-image text-2xl text-slate-300"></i></div>`}
-                    <div class="absolute top-3 left-3 bg-slate-900 text-white px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded">${post.category || 'GERAL'}</div>
-                  </div>
-                  <div class="p-5">
-                    <h3 class="text-lg font-black text-slate-800 dark:text-slate-100 mb-2 leading-tight">${post.title}</h3>
-                    <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed line-clamp-3 mb-4">${post.text}</p>
-                    <div class="flex justify-between items-center">
-                      <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">${post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Recent'}</span>
-                      <button class="delete-post-btn text-red-500 hover:text-red-600 text-xs" data-id="${post.id}"><i class="fas fa-trash-alt"></i></button>
-                    </div>
-                  </div>
-                </div>
-              `).join("")}
-            </div>
-
-            <div class="flex flex-col gap-4 mt-4">
-              <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 dark:border-slate-700 pb-2">${t("newsOlder")}</h4>
-              ${remainingPosts.map(post => `
-                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl flex gap-4 items-center shadow-sm border border-slate-100 dark:border-slate-700 group hover:shadow-md transition-shadow">
-                  <div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-slate-700">
-                    ${post.image ? `<img src="${post.image}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center"><i class="fas fa-image text-slate-300"></i></div>`}
-                  </div>
-                  <div class="min-w-0 flex-grow">
-                    <h5 class="font-bold text-slate-800 dark:text-slate-100 text-sm line-clamp-1">${post.title}</h5>
-                    <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${post.text}</p>
-                    <div class="text-[9px] text-slate-400 font-bold uppercase mt-1">${post.author || 'Supervisão'}</div>
-                  </div>
-                  <div class="text-[10px] text-slate-300 font-bold ml-auto">${post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : (post.createdAt instanceof Date ? post.createdAt.toLocaleDateString() : '')}</div>
-                  <button class="delete-post-btn text-slate-300 hover:text-red-500 transition-colors ml-2" data-id="${post.id}"><i class="fas fa-times"></i></button>
-                </div>
-              `).join("")}
-            </div>
-          </div>
-
-          <div class="lg:col-span-4 flex flex-col gap-8">
-            <div class="bg-slate-900 rounded-2xl p-6 text-white shadow-xl">
-              <h3 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">${t("newsStayConnected")}</h3>
-              <div class="space-y-4">
-                <div class="flex items-center justify-between group p-2 rounded">
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-blue-600 rounded flex items-center justify-center font-black">OP</div>
-                    <div>
-                      <div class="text-xs font-bold">${t("newsEffTitle")}</div>
-                      <div class="text-[10px] text-blue-400 font-medium">${efficiency}% Successful</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between group p-2 rounded">
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-emerald-600 rounded flex items-center justify-center font-black">TR</div>
-                    <div>
-                      <div class="text-xs font-bold">${t("newsTransitTitle")}</div>
-                      <div class="text-[10px] text-emerald-400 font-medium">${transit} Units Moving</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="mt-8 pt-8 border-t border-white/10">
-                 <div class="bg-blue-600 hover:bg-blue-700 p-4 rounded-xl text-center font-black text-xs uppercase tracking-widest cursor-pointer transition-all active:scale-95" id="sidebar-add-btn">
-                   <i class="fas fa-plus mr-2"></i> ${t("newsPostNew")}
-                 </div>
-              </div>
-            </div>
-
-            <div class="bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden">
-               <div class="p-6">
-                 <h4 class="text-xs font-black tracking-widest text-slate-400 uppercase mb-4">${t("newsLotJust")}</h4>
-                 <div class="max-h-[300px] overflow-y-auto pr-2 space-y-4 mb-4 custom-scrollbar">
-                    ${uniqueLots.map(lot => `
-                      <div>
-                        <label class="text-[10px] font-black uppercase text-slate-500 mb-1 block">Lote ${lot}</label>
-                        <textarea class="lot-side-note w-full p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-700 dark:text-slate-300 resize-none focus:ring-2 focus:ring-blue-500 outline-none transition-all" rows="2" data-lot="${lot}" placeholder="Nota do lote...">${lotJustifications[lot] || ""}</textarea>
-                      </div>
-                    `).join("")}
-                 </div>
-                 <button id="save-lot-notes-btn" class="w-full bg-slate-900 dark:bg-slate-700 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95">
-                    ${t("newsSaveNotes")} <i class="fas fa-save ml-2"></i>
-                 </button>
-               </div>
-            </div>
-
-            <div class="bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden">
-               <div class="p-6">
-                 <h4 class="text-xs font-black tracking-widest text-slate-400 uppercase mb-4">${t("newsAddInfo")}</h4>
-                 <textarea id="general-operation-notes" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 min-h-[150px] resize-none focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Qualquer informação necessária...">${generalNotes}</textarea>
-                 <button id="save-general-notes-btn" class="w-full mt-4 bg-blue-600 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
-                    ${t("newsSaveAlerts")} <i class="fas fa-check ml-2"></i>
-                 </button>
-               </div>
-            </div>
+      
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[400px]">
+          <div class="bg-slate-700 text-white font-bold text-center py-2 text-sm uppercase">BACKLOG DO DIA - MOTIVOS</div>
+          <div class="overflow-y-auto flex-1 custom-scrollbar">
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 sticky top-0 z-10">
+                 <tr>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Transportadora</th>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Backlog</th>
+                   <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Principal Motivo</th>
+                   <th class="py-2 border-b dark:border-slate-700 bg-slate-100 dark:bg-slate-900 w-24">Impacto</th>
+                 </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                ${dailyCarriers.map(c => {
+                  const data = dailyByCarrier[c];
+                  if (data.backlog === 0) return '';
+                  let autoMotivos = Array.from(data.motivos).join("; ");
+                  if (!autoMotivos) autoMotivos = "-";
+                  const savedNotes = (dailyCarrierNotes[selectedHistoryDate!] || {})[c] || { motivo: '', impacto: '' };
+                  return `
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                      <td class="py-2 border-b border-r dark:border-slate-700 font-bold">${c}</td>
+                      <td class="py-2 border-b border-r dark:border-slate-700">${data.backlog}</td>
+                      <td class="py-1 px-2 border-b border-r dark:border-slate-700 text-left">
+                        <input type="text" class="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:outline-none transition-colors history-note-input px-1 py-0.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 dark:placeholder:text-slate-500" data-date="${selectedHistoryDate}" data-carrier="${c}" data-field="motivo" placeholder="${autoMotivos}" value="${savedNotes.motivo}">
+                      </td>
+                      <td class="py-1 px-2 border-b dark:border-slate-700 text-center">
+                        <input type="text" class="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:outline-none transition-colors history-note-input px-1 py-0.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-center" data-date="${selectedHistoryDate}" data-carrier="${c}" data-field="impacto" placeholder="-" value="${savedNotes.impacto}">
+                      </td>
+                    </tr>
+                  `;
+                }).join("")}
+                <tr class="bg-slate-100 dark:bg-slate-900 font-bold text-slate-800 dark:text-slate-200">
+                  <td class="py-2 border-t dark:border-slate-700 border-r">TOTAL</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.backlog}</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r"></td>
+                  <td class="py-2 border-t dark:border-slate-700"></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div id="blog-modal" class="hidden fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div class="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div class="bg-slate-900 p-6 flex justify-between items-center">
-           <h3 class="text-white font-black uppercase tracking-widest text-sm">${t("newsModalTitle")}</h3>
-           <button class="text-white/50 hover:text-white" id="close-blog-modal"><i class="fas fa-times text-xl"></i></button>
-        </div>
-        <div class="p-8 flex-grow overflow-y-auto">
-          <div class="space-y-6">
-            <div>
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Título do Post</label>
-              <input id="post-title" type="text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold outline-none">
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-               <div>
-                  <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Categoria</label>
-                  <select id="post-category" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold outline-none">
-                    <option value="GERAL">GERAL</option>
-                    <option value="OPERAÇÃO">OPERAÇÃO</option>
-                    <option value="ALERTA">ALERTA</option>
-                    <option value="SUCESSO">SUCESSO</option>
-                  </select>
-               </div>
-               <div>
-                  <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Autor</label>
-                  <input id="post-author" type="text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold outline-none" value="Supervisão">
-               </div>
-            </div>
-            <div>
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">${t("newsPostPhoto")}</label>
-              <label class="w-full h-40 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-all overflow-hidden relative">
-                 <div id="image-preview-area" class="text-center">
-                    <i class="fas fa-camera text-3xl text-slate-300 mb-2"></i>
-                    <p class="text-[10px] font-bold text-slate-400">${t("newsClickToPhoto")}</p>
-                 </div>
-                 <img id="post-image-preview" class="hidden absolute inset-0 w-full h-full object-cover">
-                 <input type="file" id="post-image-input" class="hidden" accept="image/*">
-              </label>
-            </div>
-            <div>
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Conteúdo</label>
-              <textarea id="post-text" class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none resize-none min-h-[200px]"></textarea>
+        
+        <div class="flex flex-col gap-6 h-full">
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col min-h-[220px]">
+            <div class="bg-green-700 text-white font-bold text-center py-2 text-sm uppercase">PERFORMANCE SEMANAL</div>
+            <div class="overflow-y-auto flex-1 custom-scrollbar">
+               <table class="w-full text-xs text-center border-collapse">
+                 <thead class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 sticky top-0 z-10">
+                   <tr>
+                     <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Transportadora</th>
+                     <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Programados</th>
+                     <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Entregues</th>
+                     <th class="py-2 border-b border-r dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Backlog</th>
+                     <th class="py-2 border-b dark:border-slate-700 bg-slate-100 dark:bg-slate-900">Performance</th>
+                   </tr>
+                 </thead>
+                 <tbody class="text-slate-700 dark:text-slate-300">
+                    ${weeklyCarriers.map(c => {
+                      const data = weeklyByCarrier[c];
+                      const perf = data.programados > 0 ? ((data.entregues / data.programados) * 100).toFixed(1) + "%" : "0.0%";
+                      return `
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                          <td class="py-1 border-b border-r dark:border-slate-700 font-bold">${c}</td>
+                          <td class="py-1 border-b border-r dark:border-slate-700">${data.programados}</td>
+                          <td class="py-1 border-b border-r dark:border-slate-700">${data.entregues}</td>
+                          <td class="py-1 border-b border-r dark:border-slate-700">${data.backlog}</td>
+                          <td class="py-1 border-b dark:border-slate-700">${perf}</td>
+                        </tr>
+                      `;
+                    }).join("")}
+                    <tr class="bg-slate-100 dark:bg-slate-900 font-bold text-slate-800 dark:text-slate-200">
+                      <td class="py-2 border-t dark:border-slate-700 border-r">TOTAL</td>
+                      <td class="py-2 border-t dark:border-slate-700 border-r">${weeklyTotal.programados}</td>
+                      <td class="py-2 border-t dark:border-slate-700 border-r">${weeklyTotal.entregues}</td>
+                      <td class="py-2 border-t dark:border-slate-700 border-r">${weeklyTotal.backlog}</td>
+                      <td class="py-2 border-t dark:border-slate-700">${weeklyTotal.programados > 0 ? ((weeklyTotal.entregues / weeklyTotal.programados) * 100).toFixed(1) + "%" : "0.0%"}</td>
+                    </tr>
+                 </tbody>
+               </table>
             </div>
           </div>
-        </div>
-        <div class="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex gap-4">
-           <button id="cancel-post-btn" class="flex-1 py-4 font-black uppercase tracking-widest text-sm text-slate-500 hover:text-slate-800">Descartar</button>
-           <button id="save-post-btn" class="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm">${t("newsPublish")} <i class="fas fa-paper-plane ml-2"></i></button>
+          
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col flex-1 min-h-[160px]">
+            <div class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-bold text-center py-2 text-sm uppercase border-b dark:border-slate-700">PERFORMANCE SEMANA GERAL</div>
+            <div class="p-2 relative flex-1 min-h-[120px]">
+               <canvas id="historyWeeklyChartCanvas"></canvas>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   `;
 
-  // Attach dynamic event triggers inside structural template literals
-  const modal = document.getElementById("blog-modal");
-  const imgInput = document.getElementById("post-image-input") as HTMLInputElement;
-  const imgPreview = document.getElementById("post-image-preview") as HTMLImageElement;
-  const previewArea = document.getElementById("image-preview-area");
-  let currentPostImage: string | undefined = undefined;
+  document.getElementById("history-week-select")?.addEventListener("change", (e) => {
+    selectedHistoryWeek = (e.target as HTMLSelectElement).value;
+    // reset selected date when week changes
+    selectedHistoryDate = null;
+    renderHistoryTab();
+  });
 
-  const hideModal = () => {
-    modal?.classList.add("hidden");
-    currentPostImage = undefined;
-    if(imgPreview) imgPreview.classList.add("hidden");
-    if(previewArea) previewArea.classList.remove("hidden");
-    if(imgInput) imgInput.value = "";
-  };
-
-  document.getElementById("add-news-btn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
-  document.getElementById("sidebar-add-btn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
-  document.getElementById("close-blog-modal")?.addEventListener("click", hideModal);
-  document.getElementById("cancel-post-btn")?.addEventListener("click", hideModal);
-
-  imgInput?.addEventListener("change", (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (re) => {
-        const img = new Image();
-        img.src = re.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 1000;
-          let width = img.width;
-          let height = img.height;
-          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, width, height);
-          currentPostImage = canvas.toDataURL("image/jpeg", 0.7);
-          if(imgPreview) { imgPreview.src = currentPostImage; imgPreview.classList.remove("hidden"); }
-          if(previewArea) previewArea.classList.add("hidden");
+  document.getElementById("delete-history-btn")?.addEventListener("click", () => {
+    if (!selectedHistoryDate) return;
+    
+    const container = document.getElementById("history-report-container");
+    if (!container) return;
+    
+    container.innerHTML = `
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 max-w-md mx-auto text-center mt-10">
+        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-200 mb-4"><i class="fas fa-exclamation-triangle text-amber-500 mr-2"></i> Excluir Dados Históricos</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">Por favor, insira a senha de exclusão para confirmar a remoção da data <strong>${formatDateLabel(selectedHistoryDate)}</strong>.</p>
+        <input type="password" id="delete-pwd-input" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg p-2 mb-4 focus:ring-blue-500 focus:border-blue-500" placeholder="Senha" />
+        <div class="flex justify-center gap-2">
+          <button id="cancel-delete-btn" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-bold transition-colors">Cancelar</button>
+          <button id="confirm-delete-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-colors">Confirmar Exclusão</button>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById("cancel-delete-btn")?.addEventListener("click", () => renderHistoryTab());
+    
+    document.getElementById("confirm-delete-btn")?.addEventListener("click", () => {
+      const pwd = (document.getElementById("delete-pwd-input") as HTMLInputElement).value;
+      if (pwd === "Byd@N1") {
+        historicalData = historicalData.filter(row => {
+          const d = toDateMaybe(row["DELIVERY AT BYD"]);
+          const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : (String(row["DELIVERY AT BYD"] || "").trim() || t("undefinedDate"));
+          return key !== selectedHistoryDate;
+        });
+        if (dailyCarrierNotes[selectedHistoryDate!]) {
+          delete dailyCarrierNotes[selectedHistoryDate!];
         }
-      };
-      reader.readAsDataURL(file);
+        saveStateToFirebase();
+        selectedHistoryDate = null;
+        renderHistoryTab();
+        showToast("Data excluída com sucesso.", "success");
+      } else {
+        showToast("Senha incorreta.", "error");
+      }
+    });
+  });
+
+  document.getElementById("export-history-pdf")?.addEventListener("click", () => {
+    try {
+      const doc = new (jspdf as any).jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      
+      doc.setFontSize(16);
+      doc.text(`Relatório Histórico - Semana: ${selectedHistoryWeek}`, 14, 15);
+      
+      let currentY = 25;
+      
+      const ctxDaily = document.getElementById("historyDailyChartCanvas") as HTMLCanvasElement;
+      if (ctxDaily) {
+        doc.setFontSize(12);
+        doc.text("Desempenho Diário por Transportadora", 14, currentY);
+        const imgData = ctxDaily.toDataURL("image/png");
+        doc.addImage(imgData, "PNG", 14, currentY + 5, 130, 65);
+      }
+      
+      const ctxWeekly = document.getElementById("historyWeeklyChartCanvas") as HTMLCanvasElement;
+      if (ctxWeekly) {
+        doc.setFontSize(12);
+        doc.text("Performance Semanal Geral", 150, currentY);
+        const imgDataWeekly = ctxWeekly.toDataURL("image/png");
+        doc.addImage(imgDataWeekly, "PNG", 150, currentY + 5, 130, 65);
+      }
+      
+      currentY += 80;
+      
+      // AutoTable for daily performance
+      doc.setFontSize(12);
+      doc.text(`Transportadoras Diário (${formatDateLabel(selectedHistoryDate!)})`, 14, currentY);
+      currentY += 5;
+      
+      const dailyTableData = dailyCarriers.map(c => [
+        c,
+        dailyByCarrier[c].programados,
+        dailyByCarrier[c].entregues,
+        dailyByCarrier[c].backlog,
+        dailyByCarrier[c].programados > 0 ? ((dailyByCarrier[c].entregues / dailyByCarrier[c].programados) * 100).toFixed(1) + "%" : "0.0%"
+      ]);
+      dailyTableData.push(["TOTAL", dailyTotal.programados, dailyTotal.entregues, dailyTotal.backlog, dailyTotal.programados > 0 ? ((dailyTotal.entregues / dailyTotal.programados) * 100).toFixed(1) + "%" : "0.0%"]);
+      
+      (doc as any).autoTable({
+        startY: currentY,
+        head: [["Transportadora", "Programados", "Entregues", "Backlog", "Performance"]],
+        body: dailyTableData,
+        theme: "grid",
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [51, 65, 85] }
+      });
+      
+      currentY = (doc as any).lastAutoTable.finalY + 15;
+      
+      // AutoTable for weekly performance
+      doc.text("Transportadoras Semanal", 14, currentY);
+      currentY += 5;
+      
+      const weeklyTableData = weeklyCarriers.map(c => [
+        c,
+        weeklyByCarrier[c].programados,
+        weeklyByCarrier[c].entregues,
+        weeklyByCarrier[c].backlog,
+        weeklyByCarrier[c].programados > 0 ? ((weeklyByCarrier[c].entregues / weeklyByCarrier[c].programados) * 100).toFixed(1) + "%" : "0.0%"
+      ]);
+      weeklyTableData.push(["TOTAL", weeklyTotal.programados, weeklyTotal.entregues, weeklyTotal.backlog, weeklyTotal.programados > 0 ? ((weeklyTotal.entregues / weeklyTotal.programados) * 100).toFixed(1) + "%" : "0.0%"]);
+      
+      (doc as any).autoTable({
+        startY: currentY,
+        head: [["Transportadora", "Programados", "Entregues", "Backlog", "Performance"]],
+        body: weeklyTableData,
+        theme: "grid",
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [21, 128, 61] } // green-700
+      });
+      
+      doc.save(`Historico_${selectedHistoryWeek?.replace(/ /g, "_")}.pdf`);
+      showToast(t("pdfGenerated"), "success");
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      showToast("Erro ao gerar PDF", "error");
     }
   });
 
-  document.getElementById("save-post-btn")?.addEventListener("click", async () => {
-    const title = (document.getElementById("post-title") as HTMLInputElement).value;
-    const text = (document.getElementById("post-text") as HTMLTextAreaElement).value;
-    const category = (document.getElementById("post-category") as HTMLSelectElement).value;
-    const author = (document.getElementById("post-author") as HTMLInputElement).value;
-
-    if (!title || !text) return showToast("Por favor, preencha o título e o conteúdo.", "warning");
-
-    blogPosts.unshift({ 
-      id: Date.now().toString(), 
-      title, 
-      text, 
-      category, 
-      author, 
-      image: currentPostImage,
-      createdAt: new Date() 
-    });
-    showToast("Notícia publicada com sucesso!", "success");
-    hideModal();
-    await saveStateToFirebase();
-    renderNewsTab(deliveryData);
-  });
-
-  document.getElementById("save-lot-notes-btn")?.addEventListener("click", async () => {
-    const lotNotes: Record<string, string> = {};
-    newsContent.querySelectorAll(".lot-side-note").forEach(ta => {
-      const el = ta as HTMLTextAreaElement;
-      if (el.dataset.lot) lotNotes[el.dataset.lot] = el.value;
-    });
-    lotJustifications = { ...lotJustifications, ...lotNotes };
-    showToast("Notas dos lotes salvas com sucesso!", "success");
-    await saveStateToFirebase();
-  });
-
-  document.getElementById("save-general-notes-btn")?.addEventListener("click", async () => {
-    generalNotes = (document.getElementById("general-operation-notes") as HTMLTextAreaElement).value;
-    showToast("Avisos gerais salvos!", "success");
-    await saveStateToFirebase();
-  });
-
-  newsContent.querySelectorAll(".delete-post-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (!confirm("Tem certeza que deseja excluir esta notícia?")) return;
-      const id = (e.currentTarget as HTMLElement).dataset.id;
-      blogPosts = blogPosts.filter(p => p.id !== id);
-      await saveStateToFirebase();
-      renderNewsTab(deliveryData);
+  document.querySelectorAll(".history-date-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      selectedHistoryDate = (e.currentTarget as HTMLElement).dataset.date || null;
+      renderHistoryTab();
     });
   });
+
+  document.querySelectorAll(".history-note-input").forEach(input => {
+    input.addEventListener("change", (e) => {
+      const target = e.target as HTMLInputElement;
+      const date = target.dataset.date;
+      const carrier = target.dataset.carrier;
+      const field = target.dataset.field; // "motivo" or "impacto"
+      const value = target.value;
+      
+      if (date && carrier && field) {
+        if (!dailyCarrierNotes[date]) dailyCarrierNotes[date] = {};
+        if (!dailyCarrierNotes[date][carrier]) dailyCarrierNotes[date][carrier] = { motivo: "", impacto: "" };
+        
+        if (field === "motivo") {
+          dailyCarrierNotes[date][carrier].motivo = value;
+        } else if (field === "impacto") {
+          dailyCarrierNotes[date][carrier].impacto = value;
+        }
+        
+        saveStateToFirebase();
+      }
+    });
+  });
+
+  if (isTypingInHistory) {
+    const inputToFocus = document.querySelector(`.history-note-input[data-date="${activeData.date}"][data-carrier="${activeData.carrier}"][data-field="${activeData.field}"]`) as HTMLInputElement;
+    if (inputToFocus) {
+      inputToFocus.focus();
+      inputToFocus.value = activeData.value;
+      // move cursor to end
+      const len = inputToFocus.value.length;
+      inputToFocus.setSelectionRange(len, len);
+    }
+  }
+
+  // Render Charts
+  const ctxDaily = document.getElementById("historyDailyChartCanvas") as HTMLCanvasElement;
+  if (ctxDaily) {
+    if (historyDailyChart) historyDailyChart.destroy();
+    historyDailyChart = new Chart(ctxDaily, {
+      type: "bar",
+      data: {
+        labels: dailyCarriers,
+        datasets: [
+          {
+            label: "Entregues",
+            data: dailyCarriers.map(c => dailyByCarrier[c].entregues),
+            backgroundColor: "#2563eb",
+            barPercentage: 0.8,
+            categoryPercentage: 0.8,
+          },
+          {
+            label: "Adiado (Backlog)",
+            data: dailyCarriers.map(c => dailyByCarrier[c].backlog),
+            backgroundColor: "#dc2626",
+            barPercentage: 0.8,
+            categoryPercentage: 0.8,
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right", labels: { boxWidth: 12, font: { size: 10 } } },
+          tooltip: { mode: "index", intersect: false },
+          datalabels: {
+            color: '#fff',
+            anchor: 'end',
+            align: 'start',
+            font: { size: 10, weight: 'bold' },
+            formatter: (val) => val > 0 ? val : ""
+          }
+        },
+        scales: {
+          x: { stacked: false, beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" } },
+          y: { stacked: false, grid: { display: false }, ticks: { font: { size: 10, weight: 'bold' } } }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+  }
+
+  const ctxWeekly = document.getElementById("historyWeeklyChartCanvas") as HTMLCanvasElement;
+  if (ctxWeekly) {
+    if (historyWeeklyChart) historyWeeklyChart.destroy();
+    historyWeeklyChart = new Chart(ctxWeekly, {
+      type: "line",
+      data: {
+        labels: weeklyTrendData.map(d => formatDateLabel(d.date)),
+        datasets: [
+          {
+            label: "Performance %",
+            data: weeklyTrendData.map(d => d.perf),
+            borderColor: "#dc2626",
+            backgroundColor: "#dc2626",
+            borderWidth: 2,
+            tension: 0,
+            pointBackgroundColor: "#2563eb",
+            pointBorderColor: "#fff",
+            pointRadius: 4,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.parsed.y.toFixed(1)}%`
+            }
+          },
+          datalabels: {
+            align: 'top',
+            color: '#334155',
+            font: { size: 10, weight: 'bold' },
+            formatter: (val) => val.toFixed(1) + "%"
+          }
+        },
+        scales: {
+          y: { beginAtZero: true, max: 100, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { stepSize: 20, callback: (v) => v + "%" } },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+  }
 }
 
-/* ----------------------- ARRIVALS & METRICS ---------------------------- */
-function renderArrivalsTable() {
-  const arrivalsContent = document.getElementById("arrivals-content");
-  if (!arrivalsContent) return;
-
-  const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
-  const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
-  const statusKeys: Record<string, string> = {
-    "A CAMINHO": "STATUS_A_CAMINHO", "ADIADO": "STATUS_ADIADO", "AGUARDANDO DESOVA": "STATUS_AGUARDANDO_DESOVA", "ENTREGUE": "STATUS_ENTREGUE"
-  };
-
-  arrivalsContent.innerHTML = `
-    <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
-      <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300">
-        <thead class="bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600">
-          <tr>
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">${t("tableHeaderLot")}</th>
-            ${statuses.map((s) => `<th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">${t(statusKeys[s] as TranslationKey)}</th>`).join("")}
-            <th class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">${t("tableHeaderTotal")}</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-          ${lotsFromData.map((lot) => {
-              const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
-              const statusCounts = statuses.reduce((acc, s) => {
-                acc[s] = deliveriesInLot.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
-                return acc;
-              }, {} as Record<string, number>);
-              const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
-              if (total === 0) return "";
-              const models = Array.from(new Set(deliveriesInLot.map(d => String(d["MODEL"] || "")).filter(m => m !== ""))).join(", ");
-              return `<tr>
-                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${models ? `${lot} - ${models}` : lot}</td>
-                ${statuses.map((s) => `<td class="px-4 py-3">${statusCounts[s] > 0 ? statusCounts[s] : ""}</td>`).join("")}
-                <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-100">${total}</td>
-              </tr>`;
-            }).join("")}
-        </tbody>
-        <tfoot class="bg-slate-50 dark:bg-slate-700 border-t border-slate-200 dark:border-slate-600 font-bold">
-          <tr>
-            <td class="px-4 py-3 text-slate-800 dark:text-slate-100">${t("tableHeaderOverallTotal")}</td>
-            ${statuses.map((s) => `<td class="px-4 py-3 text-slate-800 dark:text-slate-100">${deliveryData.filter((d) => normalizeText(d["STATUS"] || "") === normalizeText(s)).length}</td>`).join("")}
-            <td class="px-4 py-3 text-slate-800 dark:text-slate-100">${deliveryData.length}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  `;
-}
 
 function renderTimeTable(data: DeliveryRow[]) {
   const timeContent = document.getElementById("time-content");
@@ -3120,98 +3454,6 @@ exportExcelBtn?.addEventListener("click", async () => {
 
   // [rest of tab additions...]
 
-  // Tab 2: Arrivals per Lot
-  try {
-    const lotsFromData = Array.from(new Set(deliveryData.map((d) => String(d["LOT"] || "N/A")))).sort();
-    const statuses = ["A CAMINHO", "ADIADO", "AGUARDANDO DESOVA", "ENTREGUE"];
-    
-    const arrivalsAOA = [
-      ["Lote / Modelo", ...statuses]
-    ];
-
-    lotsFromData.forEach((lot) => {
-      const deliveriesInLot = deliveryData.filter((d) => String(d["LOT"] || "N/A") === lot);
-      const row = [lot];
-      statuses.forEach(s => {
-        const count = deliveriesInLot.filter(d => normalizeText(d["STATUS"] || "") === normalizeText(s)).length;
-        row.push(count || 0);
-      });
-      arrivalsAOA.push(row);
-    });
-
-    // Add Overall Total row
-    const totalsRow = ["Overall Total"];
-    statuses.forEach((s, idx) => {
-      const total = arrivalsAOA.slice(1).reduce((acc, row) => acc + (row[idx + 1] as number), 0);
-      totalsRow.push(total);
-    });
-    arrivalsAOA.push(totalsRow);
-
-    const arrivalsWs = XLSX.utils.aoa_to_sheet(arrivalsAOA);
-    
-    // Style Tab 2: Arrivals per Lot
-    const arrivalsRange = XLSX.utils.decode_range(arrivalsWs['!ref'] || 'A1');
-    for(let r = arrivalsRange.s.r; r <= arrivalsRange.e.r; r++) {
-      for(let c = arrivalsRange.s.c; c <= arrivalsRange.e.c; c++) {
-        const cellRef = XLSX.utils.encode_cell({r, c});
-        if(!arrivalsWs[cellRef]) arrivalsWs[cellRef] = { v: "", t: "s" };
-        if(!arrivalsWs[cellRef].s) arrivalsWs[cellRef].s = {};
-        
-        // Borders for all
-        arrivalsWs[cellRef].s.border = {
-          top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" }
-        };
-
-        // Header Style
-        if(r === 0) {
-          arrivalsWs[cellRef].s.font = { bold: true, color: { rgb: "FFFFFF" } };
-          arrivalsWs[cellRef].s.fill = { fgColor: { rgb: "4472C4" } };
-          arrivalsWs[cellRef].s.alignment = { horizontal: "center" };
-        }
-        // Total Row Style
-        if(r === arrivalsAOA.length - 1) {
-          arrivalsWs[cellRef].s.font = { bold: true };
-          arrivalsWs[cellRef].s.fill = { fgColor: { rgb: "D9D9D9" } };
-        }
-      }
-    }
-
-    XLSX.utils.book_append_sheet(wb, arrivalsWs, t("arrivalsTab"));
-  } catch(e) { console.error(e); }
-
-  // Append Inventory tab data to master excel file seamlessly
-  try {
-    const inventoryData = (window as any).inventoryExportData;
-    if (inventoryData && inventoryData.sections) {
-      const inventoryRows = [["CATEGORIA", "LOCALIZAÇÃO", "VAZIO", "CHEIO", "TOTAL", "CAPACIDADE"]];
-      inventoryData.sections.forEach((sec: any) => {
-        sec.locations.forEach((loc: any) => {
-          inventoryRows.push([sec.title, loc.name, loc.empty, loc.full, (loc.empty + loc.full), loc.capacity]);
-        });
-      });
-      const inventoryWs = XLSX.utils.aoa_to_sheet(inventoryRows);
-      const invRange = XLSX.utils.decode_range(inventoryWs['!ref'] || 'A1');
-      
-      for(let r = invRange.s.r; r <= invRange.e.r; r++) {
-        for(let c = invRange.s.c; c <= invRange.e.c; c++) {
-          const cellRef = XLSX.utils.encode_cell({r, c});
-          if(!inventoryWs[cellRef]) inventoryWs[cellRef] = { v: "", t: "s" };
-          if(!inventoryWs[cellRef].s) inventoryWs[cellRef].s = {};
-          
-          inventoryWs[cellRef].s.border = {
-            top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" }
-          };
-
-          if(r === 0) {
-            inventoryWs[cellRef].s.font = { bold: true, color: { rgb: "FFFFFF" } };
-            inventoryWs[cellRef].s.fill = { fgColor: { rgb: "4472C4" } };
-            inventoryWs[cellRef].s.alignment = { horizontal: "center" };
-          }
-        }
-      }
-      XLSX.utils.book_append_sheet(wb, inventoryWs, t("inventoryTab"));
-    }
-  } catch (e) { console.error(e); }
 
   XLSX.writeFile(wb, `KD_Monitor_Report_${new Date().toISOString().split("T")[0]}.xlsx`);
   showToast(t("excelGenerated"), "success");
@@ -3233,6 +3475,685 @@ exportPdfBtn?.addEventListener("click", async () => {
   } catch (e) { console.error(e); showToast(t("fileProcessError"), "error"); }
 });
 
+const saveDayBtn = document.getElementById("save-day-btn") as HTMLButtonElement;
+saveDayBtn?.addEventListener("click", async () => {
+  if (!deliveryData || deliveryData.length === 0) {
+    showToast(t("noDataToExport"), "warning");
+    return;
+  }
+  const confirmed = await showConfirmationDialog(t("saveDayConfirmTitle"), t("saveDayConfirmMsg"));
+  if (confirmed) {
+    const existingIds = new Set(historicalData.map(d => d._id));
+    deliveryData.forEach(d => {
+      if (existingIds.has(d._id)) {
+        const idx = historicalData.findIndex(h => h._id === d._id);
+        if (idx !== -1) historicalData[idx] = d;
+      } else {
+        historicalData.push(d);
+        existingIds.add(d._id);
+      }
+    });
+    
+    deliveryData = [];
+    
+    await saveStateToFirebase();
+    showToast("Dia salvo e arquivado com sucesso!", "success");
+    applyFiltersAndRender();
+    if (deliveryData.length === 0) resetUI();
+  }
+});
+
+let paretoSelectedWeek: string | null = null;
+let paretoSelectedCarrier: string = "TODOS";
+let paretoChartInstance: any = null;
+let paretoChartMode: "reason" | "carrier" = "reason";
+let paretoTableView: "daily" | "matrix" = "daily";
+
+function renderParetoTab() {
+  const paretoContent = document.getElementById("pareto-content");
+  if (!paretoContent) return;
+
+  // Combine historical and current day data
+  const allData = [...historicalData, ...deliveryData];
+  
+  if (allData.length === 0) {
+    paretoContent.innerHTML = `<div class="text-center py-20 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+      <i class="fas fa-chart-bar text-6xl text-slate-300 dark:text-slate-600 mb-4"></i>
+      <h2 class="text-2xl font-semibold text-slate-700 dark:text-slate-200">Sem dados</h2>
+      <p class="text-slate-500 dark:text-slate-400 mt-2">Nenhum dado encontrado para gerar o Pareto.</p>
+    </div>`;
+    return;
+  }
+
+  // 1. Group all available dates
+  const groupedByDate = allData.reduce((acc, row) => {
+    const d = toDateMaybe(row["DELIVERY AT BYD"]);
+    const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : t("undefinedDate");
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(row);
+    return acc;
+  }, {} as Record<string, DeliveryRow[]>);
+
+  const sortedDatesAsc = Object.keys(groupedByDate).sort((a, b) => a.localeCompare(b));
+  
+  const getWeekLabel = (dateStr: string) => {
+    if (dateStr === t("undefinedDate")) return dateStr;
+    const d = new Date(dateStr + "T12:00:00");
+    const day = d.getDay();
+    const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+    const startOfWeek = new Date(d.setDate(diffToMonday));
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    return `Semana: ${startOfWeek.getDate().toString().padStart(2, '0')}/${(startOfWeek.getMonth() + 1).toString().padStart(2, '0')} a ${endOfWeek.getDate().toString().padStart(2, '0')}/${(endOfWeek.getMonth() + 1).toString().padStart(2, '0')}`;
+  };
+
+  const weeksMap: Record<string, string[]> = {};
+  sortedDatesAsc.forEach(d => {
+    const w = getWeekLabel(d);
+    if (!weeksMap[w]) weeksMap[w] = [];
+    if (!weeksMap[w].includes(d)) weeksMap[w].push(d);
+  });
+
+  const availableWeeks = Object.keys(weeksMap);
+  if (!paretoSelectedWeek && availableWeeks.length > 0) {
+    paretoSelectedWeek = availableWeeks[availableWeeks.length - 1]; // default to latest week
+  }
+
+  const datesInSelectedWeek = paretoSelectedWeek ? (weeksMap[paretoSelectedWeek] || []) : [];
+  
+  // 2. Identify carriers
+  const carriers = new Set<string>();
+  allData.forEach(r => {
+    const c = String(r["TRANSPORTATION COMPANY"] || "").trim().toUpperCase();
+    if (c) carriers.add(c);
+  });
+  const carrierOptions = Array.from(carriers).sort();
+
+  // 3. Filter data for the selected week and carrier
+  const weekData = datesInSelectedWeek.flatMap(d => groupedByDate[d] || []);
+  const filteredData = paretoSelectedCarrier === "TODOS" 
+    ? weekData 
+    : weekData.filter(r => String(r["TRANSPORTATION COMPANY"] || "").trim().toUpperCase() === paretoSelectedCarrier);
+  
+  const occurrencesByDateAndReason: Record<string, Record<string, number>> = {};
+  const occurrencesByCarrierAndReason: Record<string, Record<string, number>> = {};
+  const defaultReasons = [
+    "PRAZO CURTO PARA COLETA",
+    "QUEBRA DE VEÍCULO",
+    "INCIDENTE TERMINAL",
+    "GREVE DOS CAMINHONEIROS",
+    "GREVE SINDICAL",
+    "ALTERAÇÃO DE PROGRAMAÇÃO",
+    "ACIDENTE NA RODOVIA",
+    "FILA NO TERMINAL",
+    "PENDÊNCIA DOCUMENTAL"
+  ];
+  const allReasons = new Set<string>(defaultReasons);
+  if ((window as any).__PARETO_REASONS__) {
+    (window as any).__PARETO_REASONS__.forEach((r: string) => allReasons.add(r));
+  }
+  
+  const matrixCarriers = new Set<string>();
+
+  filteredData.forEach(row => {
+    const pareto = String(row["PARETO"] || "").trim().toUpperCase();
+    if (pareto && pareto !== "PENDENTE") {
+      const d = toDateMaybe(row["DELIVERY AT BYD"]);
+      const dateKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : t("undefinedDate");
+      const carrier = String(row["TRANSPORTATION COMPANY"] || "").trim().toUpperCase() || "DESCONHECIDO";
+      
+      if (datesInSelectedWeek.includes(dateKey)) {
+        if (!occurrencesByDateAndReason[dateKey]) occurrencesByDateAndReason[dateKey] = {};
+        if (!occurrencesByDateAndReason[dateKey][pareto]) occurrencesByDateAndReason[dateKey][pareto] = 0;
+        occurrencesByDateAndReason[dateKey][pareto]++;
+        
+        if (!occurrencesByCarrierAndReason[carrier]) occurrencesByCarrierAndReason[carrier] = {};
+        if (!occurrencesByCarrierAndReason[carrier][pareto]) occurrencesByCarrierAndReason[carrier][pareto] = 0;
+        occurrencesByCarrierAndReason[carrier][pareto]++;
+        
+        matrixCarriers.add(carrier);
+        allReasons.add(pareto);
+      }
+    }
+  });
+
+  const matrixCarrierList = Array.from(matrixCarriers).sort();
+
+  let reasonTotals: { reason: string, total: number }[] = Array.from(allReasons).map(reason => {
+    let sum = 0;
+    datesInSelectedWeek.forEach(d => {
+      sum += (occurrencesByDateAndReason[d]?.[reason] || 0);
+    });
+    return { reason, total: sum };
+  }).filter(r => r.total > 0);
+
+  if (reasonTotals.length === 0) {
+    // leave it empty
+  }
+
+  reasonTotals.sort((a, b) => {
+    if (b.total !== a.total) {
+      return b.total - a.total;
+    }
+    return a.reason.localeCompare(b.reason);
+  });
+  const grandTotal = reasonTotals.reduce((acc, r) => acc + r.total, 0);
+
+  let cumulative = 0;
+  const tableRows = reasonTotals.map(r => {
+    const pct = grandTotal > 0 ? (r.total / grandTotal) * 100 : 0;
+    cumulative += pct;
+    return {
+      reason: r.reason,
+      total: r.total,
+      pct,
+      cumulative: Math.min(cumulative, 100)
+    };
+  });
+
+  // Calculate carrier totals for the carrier chart mode
+  let carrierTotals: { carrier: string, total: number }[] = matrixCarrierList.map(carrier => {
+    let sum = 0;
+    reasonTotals.forEach(r => {
+      sum += (occurrencesByCarrierAndReason[carrier]?.[r.reason] || 0);
+    });
+    return { carrier, total: sum };
+  }).filter(c => c.total > 0);
+
+  carrierTotals.sort((a, b) => {
+    if (b.total !== a.total) {
+      return b.total - a.total;
+    }
+    return a.carrier.localeCompare(b.carrier);
+  });
+
+  let carrierCumulative = 0;
+  const carrierChartData = carrierTotals.map(c => {
+    const pct = grandTotal > 0 ? (c.total / grandTotal) * 100 : 0;
+    carrierCumulative += pct;
+    return {
+      carrier: c.carrier,
+      total: c.total,
+      pct,
+      cumulative: Math.min(carrierCumulative, 100)
+    };
+  });
+
+  const formatDateLabel = (dKey: string) => dKey === t("undefinedDate") ? dKey : dKey.split("-").reverse().join("/");
+
+  let html = `
+    <div class="bg-red-600 text-white p-4 rounded-t-lg shadow-sm">
+      <h2 class="text-center text-2xl font-bold">Análise de Fenômeno - Paretos</h2>
+    </div>
+    
+    <div class="bg-white dark:bg-slate-800 p-4 border-x border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-4 items-center justify-between mb-6 rounded-b-lg shadow-sm">
+      <div class="flex flex-wrap gap-4 items-center">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-calendar-alt text-slate-400"></i>
+          <select id="pareto-week-select" class="border border-slate-300 dark:border-slate-600 rounded p-2 text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+            ${availableWeeks.map(w => `<option value="${w}" ${w === paretoSelectedWeek ? 'selected' : ''}>${w}</option>`).join('')}
+          </select>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <i class="fas fa-truck text-slate-400"></i>
+          <select id="pareto-carrier-select" class="border border-slate-300 dark:border-slate-600 rounded p-2 text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+            <option value="TODOS" ${paretoSelectedCarrier === "TODOS" ? 'selected' : ''}>TODAS TRANSPORTADORAS</option>
+            ${carrierOptions.map(c => `<option value="${c}" ${c === paretoSelectedCarrier ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div>
+        <button id="pareto-config-btn" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-md font-semibold text-sm transition-colors flex items-center gap-2">
+          <i class="fas fa-cog"></i> Configurar Motivos
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col xl:flex-row gap-6 mb-6">
+      <div class="flex-1 overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+        <div class="bg-slate-200 dark:bg-slate-700 p-2 border-b border-slate-300 dark:border-slate-600 flex justify-between items-center">
+          <h3 class="font-bold text-slate-700 dark:text-slate-200 ml-2">Estratificação 1</h3>
+          <div class="flex">
+            <button id="pareto-table-daily" class="px-3 py-1 text-xs font-bold rounded-l-md border ${paretoTableView === 'daily' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300'}">Visão Diária</button>
+            <button id="pareto-table-matrix" class="px-3 py-1 text-xs font-bold rounded-r-md border ${paretoTableView === 'matrix' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300'}">Matriz Transportadoras</button>
+          </div>
+        </div>
+        ${paretoTableView === 'daily' ? `
+        <table class="w-full text-sm text-left whitespace-nowrap">
+          <thead class="bg-slate-400 dark:bg-slate-600 text-white font-bold text-xs">
+            <tr>
+              <th class="px-2 py-3 border border-slate-300 dark:border-slate-500 text-center w-10">#</th>
+              <th class="px-4 py-3 border border-slate-300 dark:border-slate-500">${paretoSelectedCarrier !== "TODOS" ? paretoSelectedCarrier : "MOTIVOS"}</th>
+              ${datesInSelectedWeek.map(d => `<th class="px-2 py-3 border border-slate-300 dark:border-slate-500 text-center text-[10px] sm:text-xs bg-[#c2d69b] dark:bg-lime-800 text-slate-800 dark:text-lime-100">${formatDateLabel(d)}</th>`).join('')}
+              <th class="px-3 py-3 border border-slate-300 dark:border-slate-500 text-center bg-slate-500 dark:bg-slate-700">Qtd de Cntr</th>
+              <th class="px-3 py-3 border border-slate-300 dark:border-slate-500 text-center bg-slate-500 dark:bg-slate-700">%</th>
+              <th class="px-3 py-3 border border-slate-300 dark:border-slate-500 text-center bg-slate-500 dark:bg-slate-700">% Acum.</th>
+            </tr>
+          </thead>
+          <tbody class="text-slate-700 dark:text-slate-300">
+            ${tableRows.length > 0 ? tableRows.map((r, idx) => `
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                <td class="px-2 py-2 border border-slate-200 dark:border-slate-700 text-center font-bold">${idx + 1}</td>
+                <td class="px-4 py-2 border border-slate-200 dark:border-slate-700 font-semibold">${r.reason}</td>
+                ${datesInSelectedWeek.map(d => {
+                  const val = occurrencesByDateAndReason[d]?.[r.reason] || 0;
+                  return `<td class="px-2 py-2 border border-slate-200 dark:border-slate-700 text-center ${val > 0 ? '' : 'text-transparent'}">${val > 0 ? val : 0}</td>`;
+                }).join('')}
+                <td class="px-3 py-2 border border-slate-200 dark:border-slate-700 text-center font-bold bg-yellow-50 dark:bg-yellow-900/20 text-slate-800">${r.total}</td>
+                <td class="px-3 py-2 border border-slate-200 dark:border-slate-700 text-center font-bold">${r.pct.toFixed(2).replace('.', ',')}%</td>
+                <td class="px-3 py-2 border border-slate-200 dark:border-slate-700 text-center font-bold">${r.cumulative.toFixed(0)}%</td>
+              </tr>
+            `).join('') : `<tr><td colspan="${4 + datesInSelectedWeek.length}" class="text-center py-4">Nenhum dado de ocorrência para os filtros selecionados.</td></tr>`}
+          </tbody>
+          ${tableRows.length > 0 ? `
+          <tfoot class="bg-slate-600 dark:bg-slate-800 text-white font-bold">
+            <tr>
+              <td colspan="2" class="px-4 py-3 border border-slate-500 text-right">TOTAL</td>
+              ${datesInSelectedWeek.map(d => {
+                const totalForDay = tableRows.reduce((sum, r) => sum + (occurrencesByDateAndReason[d]?.[r.reason] || 0), 0);
+                return `<td class="px-2 py-3 border border-slate-500 text-center">${totalForDay > 0 ? totalForDay : ''}</td>`;
+              }).join('')}
+              <td class="px-3 py-3 border border-slate-500 text-center">${grandTotal}</td>
+              <td class="px-3 py-3 border border-slate-500 text-center">100%</td>
+              <td class="px-3 py-3 border border-slate-500 text-center"></td>
+            </tr>
+          </tfoot>
+          ` : ''}
+        </table>
+        ` : `
+        <table class="w-full text-sm text-left whitespace-nowrap">
+          <thead class="bg-slate-400 dark:bg-slate-600 text-white font-bold text-xs">
+            <tr>
+              <th class="px-4 py-3 border border-slate-300 dark:border-slate-500">MOTIVO</th>
+              ${matrixCarrierList.map(c => `<th class="px-2 py-3 border border-slate-300 dark:border-slate-500 text-center bg-[#c2d69b] dark:bg-lime-800 text-slate-800 dark:text-lime-100 max-w-[100px] truncate" title="${c}">${c}</th>`).join('')}
+              <th class="px-3 py-3 border border-slate-300 dark:border-slate-500 text-center bg-slate-500 dark:bg-slate-700">Qtd</th>
+              <th class="px-3 py-3 border border-slate-300 dark:border-slate-500 text-center bg-slate-500 dark:bg-slate-700">%</th>
+            </tr>
+          </thead>
+          <tbody class="text-slate-700 dark:text-slate-300">
+            ${tableRows.length > 0 ? tableRows.map((r) => `
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                <td class="px-4 py-2 border border-slate-200 dark:border-slate-700 font-semibold">${r.reason}</td>
+                ${matrixCarrierList.map(c => {
+                  const val = occurrencesByCarrierAndReason[c]?.[r.reason] || 0;
+                  return `<td class="px-2 py-2 border border-slate-200 dark:border-slate-700 text-center ${val > 0 ? '' : 'text-transparent'}">${val > 0 ? val : 0}</td>`;
+                }).join('')}
+                <td class="px-3 py-2 border border-slate-200 dark:border-slate-700 text-center font-bold bg-yellow-50 dark:bg-yellow-900/20 text-slate-800">${r.total}</td>
+                <td class="px-3 py-2 border border-slate-200 dark:border-slate-700 text-center font-bold">${r.pct.toFixed(2).replace('.', ',')}%</td>
+              </tr>
+            `).join('') : `<tr><td colspan="${3 + matrixCarrierList.length}" class="text-center py-4">Nenhum dado de ocorrência para os filtros selecionados.</td></tr>`}
+          </tbody>
+          ${tableRows.length > 0 ? `
+          <tfoot class="bg-slate-600 dark:bg-slate-800 text-white font-bold">
+            <tr>
+              <td class="px-4 py-3 border border-slate-500 text-right">TOTAL</td>
+              ${matrixCarrierList.map(c => {
+                const totalForCarrier = tableRows.reduce((sum, r) => sum + (occurrencesByCarrierAndReason[c]?.[r.reason] || 0), 0);
+                return `<td class="px-2 py-3 border border-slate-500 text-center">${totalForCarrier > 0 ? totalForCarrier : ''}</td>`;
+              }).join('')}
+              <td class="px-3 py-3 border border-slate-500 text-center">${grandTotal}</td>
+              <td class="px-3 py-3 border border-slate-500 text-center">100%</td>
+            </tr>
+          </tfoot>
+          ` : ''}
+        </table>
+        `}
+      </div>
+      
+      <div class="flex-1 min-w-[300px] bg-slate-100 dark:bg-slate-800/80 rounded-lg shadow-sm border border-slate-300 dark:border-slate-700 p-4 relative flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <div class="flex rounded-md shadow-sm">
+            <button id="pareto-chart-mode-reason" class="px-4 py-1.5 text-xs font-bold rounded-l-md border ${paretoChartMode === 'reason' ? 'bg-blue-600 text-white border-blue-600 z-10' : 'bg-white text-slate-600 border-slate-300'}">Por Motivo</button>
+            <button id="pareto-chart-mode-carrier" class="px-4 py-1.5 text-xs font-bold rounded-r-md border -ml-px ${paretoChartMode === 'carrier' ? 'bg-blue-600 text-white border-blue-600 z-10' : 'bg-white text-slate-600 border-slate-300'}">Por Transportadora</button>
+          </div>
+          ${paretoChartMode === 'reason' ? '<span class="text-xs text-slate-500">💡 Clique nas barras para ver o detalhamento</span>' : ''}
+        </div>
+        <div class="flex-1 min-h-[360px]">
+          <canvas id="paretoChartCanvas"></canvas>
+        </div>
+      </div>
+  `;
+
+  paretoContent.innerHTML = html;
+
+  const ctx = document.getElementById("paretoChartCanvas") as HTMLCanvasElement;
+  if (ctx && tableRows.length > 0) {
+    if (paretoChartInstance) {
+      paretoChartInstance.destroy();
+    }
+    
+    const isReasonMode = paretoChartMode === 'reason';
+    const chartLabels = isReasonMode ? tableRows.map(r => r.reason) : carrierChartData.map(c => c.carrier);
+    const chartCumulative = isReasonMode ? tableRows.map(r => r.cumulative) : carrierChartData.map(c => c.cumulative);
+    const chartTotals = isReasonMode ? tableRows.map(r => r.total) : carrierChartData.map(c => c.total);
+    
+    paretoChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: chartLabels,
+        datasets: [
+          {
+            type: 'line',
+            label: '% Acumulado',
+            data: chartCumulative,
+            borderColor: '#ef4444',
+            backgroundColor: '#ef4444',
+            borderWidth: 2,
+            pointBackgroundColor: '#ef4444',
+            pointBorderColor: '#fff',
+            pointRadius: 5,
+            yAxisID: 'y1',
+            datalabels: {
+              align: 'top',
+              anchor: 'center',
+              formatter: (val: number) => val.toFixed(0) + '%',
+              color: '#333',
+              font: { weight: 'bold', size: 10 },
+              offset: 4
+            }
+          },
+          {
+            type: 'bar',
+            label: 'Qtd de Cntr',
+            data: chartTotals,
+            backgroundColor: isReasonMode ? '#c2410c' : '#3b82f6', 
+            borderColor: isReasonMode ? '#9a3412' : '#2563eb',
+            borderWidth: 1,
+            yAxisID: 'y',
+            datalabels: {
+              align: 'start',
+              anchor: 'start',
+              formatter: (val: number) => val,
+              color: '#fff',
+              font: { weight: 'bold', size: 12 },
+              offset: -20 // Push label inside bar
+            }
+          }
+        ]
+      },
+      plugins: [ChartDataLabels],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (evt: any, elements: any[]) => {
+          if (isReasonMode && elements.length > 0) {
+            const index = elements[0].index;
+            const clickedReason = chartLabels[index];
+            showParetoDrillDownModal(clickedReason, matrixCarrierList, occurrencesByCarrierAndReason);
+          }
+        },
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx: any) => ctx.datasetIndex === 0 ? ` ${ctx.raw.toFixed(0)}%` : ` ${ctx.raw} cntr`
+            }
+          },
+          datalabels: {
+            display: true
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              autoSkip: false,
+              maxRotation: 45,
+              minRotation: 45,
+              font: { size: 10 }
+            },
+            grid: { display: false }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: { display: false },
+            grid: { drawOnChartArea: true, color: '#e2e8f0' }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            min: 0,
+            max: 100,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              stepSize: 10,
+              callback: (val: number) => val + '%'
+            }
+          }
+        }
+      }
+    });
+  }
+
+  document.getElementById("pareto-week-select")?.addEventListener("change", (e) => {
+    paretoSelectedWeek = (e.target as HTMLSelectElement).value;
+    renderParetoTab();
+  });
+  
+  document.getElementById("pareto-carrier-select")?.addEventListener("change", (e) => {
+    paretoSelectedCarrier = (e.target as HTMLSelectElement).value;
+    renderParetoTab();
+  });
+
+  document.getElementById("pareto-config-btn")?.addEventListener("click", () => {
+    renderParetoConfigModal();
+  });
+
+  document.getElementById("pareto-table-daily")?.addEventListener("click", () => {
+    paretoTableView = "daily";
+    renderParetoTab();
+  });
+
+  document.getElementById("pareto-table-matrix")?.addEventListener("click", () => {
+    paretoTableView = "matrix";
+    renderParetoTab();
+  });
+
+  document.getElementById("pareto-chart-mode-reason")?.addEventListener("click", () => {
+    paretoChartMode = "reason";
+    renderParetoTab();
+  });
+
+  document.getElementById("pareto-chart-mode-carrier")?.addEventListener("click", () => {
+    paretoChartMode = "carrier";
+    renderParetoTab();
+  });
+}
+
+function showParetoDrillDownModal(reason: string, matrixCarrierList: string[], occurrencesByCarrierAndReason: Record<string, Record<string, number>>) {
+  const modal = document.createElement("div");
+  modal.className = "fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-in fade-in";
+  
+  let carrierData: { carrier: string, count: number }[] = [];
+  let totalCount = 0;
+  
+  matrixCarrierList.forEach(c => {
+    const count = occurrencesByCarrierAndReason[c]?.[reason] || 0;
+    if (count > 0) {
+      carrierData.push({ carrier: c, count });
+      totalCount += count;
+    }
+  });
+  
+  carrierData.sort((a, b) => b.count - a.count);
+
+  modal.innerHTML = `
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-t-lg">
+        <div>
+          <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <i class="fas fa-search-plus text-blue-500"></i> Detalhamento: ${reason}
+          </h3>
+          <p class="text-sm text-slate-500 mt-1">Ocorrências por transportadora nesta semana</p>
+        </div>
+        <button id="close-drilldown-modal" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto">
+        ${carrierData.length > 0 ? `
+          <div class="mb-4">
+            <div class="flex justify-between items-end mb-2">
+              <span class="text-sm font-semibold text-slate-600 dark:text-slate-400">Total de contêineres:</span>
+              <span class="text-2xl font-bold text-slate-800 dark:text-slate-200">${totalCount}</span>
+            </div>
+            <div class="h-12 w-full bg-slate-100 dark:bg-slate-900 rounded overflow-hidden flex border border-slate-200 dark:border-slate-700">
+              ${carrierData.map((cd, i) => {
+                const colors = ['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-yellow-500', 'bg-cyan-500'];
+                const bg = colors[i % colors.length];
+                const pct = (cd.count / totalCount) * 100;
+                return `<div class="${bg}" style="width: ${pct}%" title="${cd.carrier}: ${cd.count} (${pct.toFixed(1)}%)"></div>`;
+              }).join('')}
+            </div>
+          </div>
+          <table class="w-full text-sm text-left mt-6">
+            <thead class="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase">
+              <tr>
+                <th class="px-4 py-2 border-y border-slate-200 dark:border-slate-600">Transportadora</th>
+                <th class="px-4 py-2 border-y border-slate-200 dark:border-slate-600 text-center w-24">Qtd</th>
+                <th class="px-4 py-2 border-y border-slate-200 dark:border-slate-600 text-center w-24">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${carrierData.map((cd, i) => {
+                const colors = ['text-blue-500', 'text-orange-500', 'text-emerald-500', 'text-purple-500', 'text-pink-500', 'text-yellow-500', 'text-cyan-500'];
+                const color = colors[i % colors.length];
+                return `
+                <tr class="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <td class="px-4 py-2 font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full ${color.replace('text-', 'bg-')}"></div>
+                    ${cd.carrier}
+                  </td>
+                  <td class="px-4 py-2 text-center font-bold text-slate-800 dark:text-slate-200">${cd.count}</td>
+                  <td class="px-4 py-2 text-center text-slate-500">${((cd.count / totalCount) * 100).toFixed(1)}%</td>
+                </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        ` : `
+          <div class="text-center py-8">
+            <i class="fas fa-check-circle text-4xl text-emerald-400 mb-3"></i>
+            <p class="text-slate-600 dark:text-slate-300 font-medium">Nenhuma ocorrência registrada.</p>
+          </div>
+        `}
+      </div>
+      <div class="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-b-lg flex justify-end">
+        <button id="close-drilldown-btn" class="px-6 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded font-semibold transition-colors">
+          Fechar
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeModal = () => modal.remove();
+  document.getElementById("close-drilldown-modal")?.addEventListener("click", closeModal);
+  document.getElementById("close-drilldown-btn")?.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+}
+
+function renderParetoConfigModal() {
+  const container = document.createElement("div");
+  container.className = "fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 transition-opacity";
+  container.id = "pareto-config-modal-container";
+  
+  const reasons = (window as any).__PARETO_REASONS__ || [
+    "PRAZO CURTO PARA COLETA",
+    "QUEBRA DE VEÍCULO",
+    "INCIDENTE TERMINAL",
+    "GREVE DOS CAMINHONEIROS",
+    "GREVE SINDICAL",
+    "ALTERAÇÃO DE PROGRAMAÇÃO",
+    "ACIDENTE NA RODOVIA",
+    "FILA NO TERMINAL",
+    "PENDÊNCIA DOCUMENTAL"
+  ];
+
+  container.innerHTML = `
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+      <div class="bg-slate-100 dark:bg-slate-700 p-4 border-b border-slate-200 dark:border-slate-600 flex justify-between items-center">
+        <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Configurar Motivos (Pareto)</h3>
+        <button id="close-pareto-config" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 custom-scrollbar">
+        <div class="mb-4">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Adicionar Novo Motivo</label>
+          <div class="flex gap-2">
+            <input type="text" id="new-pareto-reason" class="flex-1 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="DIGITE O MOTIVO...">
+            <button id="add-pareto-reason-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold text-sm transition-colors"><i class="fas fa-plus"></i> Adicionar</button>
+          </div>
+        </div>
+        
+        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 mt-6">Motivos Cadastrados</label>
+        <ul id="pareto-reasons-list" class="divide-y divide-slate-100 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-md">
+          ${reasons.map((r: string, i: number) => `
+            <li class="p-3 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <span class="text-sm font-medium text-slate-700 dark:text-slate-300">${r}</span>
+              <button class="text-red-500 hover:text-red-700 p-1 delete-reason-btn" data-index="${i}"><i class="fas fa-trash-alt"></i></button>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+      <div class="p-4 border-t border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 flex justify-end gap-3">
+        <button id="save-pareto-config-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded font-bold transition-colors">Salvar Alterações</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(container);
+
+  const closeBtn = document.getElementById("close-pareto-config");
+  const saveBtn = document.getElementById("save-pareto-config-btn");
+  const addBtn = document.getElementById("add-pareto-reason-btn");
+  const input = document.getElementById("new-pareto-reason") as HTMLInputElement;
+
+  const close = () => {
+    container.remove();
+  };
+
+  closeBtn?.addEventListener("click", close);
+
+  addBtn?.addEventListener("click", () => {
+    const val = input.value.trim().toUpperCase();
+    if (val && !reasons.includes(val)) {
+      reasons.unshift(val); // add to top
+      renderParetoConfigModal(); // re-render
+      close();
+    }
+  });
+
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addBtn?.click();
+  });
+
+  container.querySelectorAll(".delete-reason-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt((e.currentTarget as HTMLElement).dataset.index || "-1", 10);
+      if (idx >= 0) {
+        reasons.splice(idx, 1);
+        renderParetoConfigModal(); // re-render
+        close();
+      }
+    });
+  });
+
+  saveBtn?.addEventListener("click", async () => {
+    (window as any).__PARETO_REASONS__ = reasons;
+    await saveStateToFirebase();
+    showToast("Motivos atualizados com sucesso", "success");
+    close();
+    applyFiltersAndRender();
+    renderParetoTab();
+  });
+}
+
 /* ------------------------------ STARTUP ----------------------------------- */
 document.addEventListener("DOMContentLoaded", () => {
   setTheme(((localStorage.getItem("theme") as any) || "light") as any);
@@ -3240,4 +4161,23 @@ document.addEventListener("DOMContentLoaded", () => {
   setLanguage((localStorage.getItem("language") as Language) || "pt-BR");
   listenForRealtimeUpdates();
   resetUI();
+
+  // Escape key handler to close maximized chart modal
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const maxContainer = document.getElementById("chart-max-modal-container");
+      const maxModal = document.getElementById("chart-max-modal");
+      if (maxContainer && !maxContainer.classList.contains("hidden") && maxModal) {
+        maxModal.classList.add("scale-95", "opacity-0");
+        maxModal.classList.remove("scale-100", "opacity-100");
+        setTimeout(() => {
+          maxContainer.classList.add("hidden");
+          if (maxLotChart) {
+            maxLotChart.destroy();
+            maxLotChart = null;
+          }
+        }, 200);
+      }
+    }
+  });
 });
