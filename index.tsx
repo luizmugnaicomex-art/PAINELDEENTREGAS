@@ -3002,14 +3002,46 @@ function renderTimeTable(data: DeliveryRow[]) {
   let totalTimeSum = 0, validRecords = 0;
   let totalTimeSumP1 = 0, validRecordsP1 = 0;
   let totalTimeSumP2 = 0, validRecordsP2 = 0;
+  
+  let desovaTotal = 0, desova1 = 0, desova2 = 0, desovaCross = 0;
+  let baixaTotal = 0, baixa1 = 0, baixa2 = 0;
 
   const rowsHtml = data.map((row) => {
+    const op = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
+    const status = normalizeText(row["STATUS"] || "");
+    const isDesova = op.includes("UNLOAD") || op.includes("DESOVA");
+    const isBaixa = op.includes("SWAP") || op.includes("PUT DOWN") || op.includes("PUTDOWN") || op.includes("BAIXA") || op.includes("PISO");
+
     const startDt = toDateTimeMaybe(row["TERMINAL - INÍCIO DE ROTA"]);
     let endDt = toDateTimeMaybe(row["ENTREGA VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA"]);
     let fullTimeString = "-";
     let durationHours = 0;
 
+    const isBaixaCompleted = isBaixa && (status === "ENTREGUE" || startDt);
+
+    if (isDesova) desovaTotal++;
+    if (isBaixaCompleted) baixaTotal++;
+    
+    if (isBaixaCompleted && startDt) {
+      const sTime = startDt.getHours() * 100 + startDt.getMinutes();
+      const s1 = (sTime >= 630 && sTime <= 1500);
+      if (s1) baixa1++;
+      else baixa2++;
+    }
+
     if (startDt && endDt) {
+      const sTime = startDt.getHours() * 100 + startDt.getMinutes();
+      const eTime = endDt.getHours() * 100 + endDt.getMinutes();
+      
+      const s1 = (sTime >= 630 && sTime <= 1500);
+      const e1 = (eTime >= 630 && eTime <= 1500);
+      
+      if (isDesova) {
+        if (s1 && e1) desova1++;
+        else if (!s1 && !e1) desova2++;
+        else if (s1 && !e1) desovaCross++;
+      }
+
       const diffMs = endDt.getTime() - startDt.getTime();
       if (diffMs > -3600000) { // Small threshold for slight negative values due to clock drift
         durationHours = Math.max(0, diffMs / (1000 * 60 * 60));
@@ -3200,6 +3232,100 @@ function renderTimeTable(data: DeliveryRow[]) {
           </div>
         </div>
         <p class="text-[10px] text-slate-400 px-2 italic">Ref. Horário Relógio: ${now.toLocaleTimeString()}</p>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <h3 class="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide mb-4">Recebimentos por Turno e Tipo de Recebimento</h3>
+      <div class="flex flex-col xl:flex-row gap-4">
+        
+        <!-- Card 1: DESOVAS -->
+        <div class="flex-1 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center gap-3 mb-6 border-b border-slate-100 dark:border-slate-700 pb-3">
+            <i class="fas fa-box-open text-blue-600 text-2xl"></i>
+            <h4 class="text-base font-bold text-blue-800 dark:text-blue-400">DESOVAS (${desovaTotal})</h4>
+          </div>
+          <div class="space-y-5">
+            
+            <div class="flex items-center">
+              <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 1º turno</div>
+              <div class="flex-1 flex items-center gap-3">
+                <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
+                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotal > 0 ? (desova1 / desovaTotal * 100) : 0}%"></div>
+                </div>
+                <div class="w-16 text-right flex flex-col items-end leading-tight">
+                  <span class="text-sm font-black text-green-600">${desova1}</span>
+                  <span class="text-[10px] font-bold text-green-600/70">(${desovaTotal > 0 ? (desova1 / desovaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex items-center">
+              <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 2º turno</div>
+              <div class="flex-1 flex items-center gap-3">
+                <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
+                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotal > 0 ? (desova2 / desovaTotal * 100) : 0}%"></div>
+                </div>
+                <div class="w-16 text-right flex flex-col items-end leading-tight">
+                  <span class="text-sm font-black text-blue-600">${desova2}</span>
+                  <span class="text-[10px] font-bold text-blue-600/70">(${desovaTotal > 0 ? (desova2 / desovaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center">
+              <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Iniciadas no 1º turno e finalizadas no 2º turno</div>
+              <div class="flex-1 flex items-center gap-3">
+                <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
+                  <div class="absolute top-0 left-0 h-full bg-orange-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotal > 0 ? (desovaCross / desovaTotal * 100) : 0}%"></div>
+                </div>
+                <div class="w-16 text-right flex flex-col items-end leading-tight">
+                  <span class="text-sm font-black text-orange-600">${desovaCross}</span>
+                  <span class="text-[10px] font-bold text-orange-600/70">(${desovaTotal > 0 ? (desovaCross / desovaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Card 2: BAIXA DE PISO -->
+        <div class="flex-1 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-5">
+          <div class="flex items-center gap-3 mb-6 border-b border-slate-100 dark:border-slate-700 pb-3">
+            <i class="fas fa-exchange-alt text-purple-600 text-2xl"></i>
+            <h4 class="text-base font-bold text-purple-800 dark:text-purple-400">BAIXA DE PISO (SWAP / PUT DOWN) (${baixaTotal})</h4>
+          </div>
+          <div class="space-y-5">
+            
+            <div class="flex items-center">
+              <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 1º turno</div>
+              <div class="flex-1 flex items-center gap-3">
+                <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
+                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${baixaTotal > 0 ? (baixa1 / baixaTotal * 100) : 0}%"></div>
+                </div>
+                <div class="w-16 text-right flex flex-col items-end leading-tight">
+                  <span class="text-sm font-black text-green-600">${baixa1}</span>
+                  <span class="text-[10px] font-bold text-green-600/70">(${baixaTotal > 0 ? (baixa1 / baixaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex items-center">
+              <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 2º turno</div>
+              <div class="flex-1 flex items-center gap-3">
+                <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
+                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${baixaTotal > 0 ? (baixa2 / baixaTotal * 100) : 0}%"></div>
+                </div>
+                <div class="w-16 text-right flex flex-col items-end leading-tight">
+                  <span class="text-sm font-black text-blue-600">${baixa2}</span>
+                  <span class="text-[10px] font-bold text-blue-600/70">(${baixaTotal > 0 ? (baixa2 / baixaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </div>
 
