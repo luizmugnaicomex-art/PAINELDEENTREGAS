@@ -3006,42 +3006,50 @@ function renderTimeTable(data: DeliveryRow[]) {
   let desovaTotal = 0, desova1 = 0, desova2 = 0, desovaCross = 0;
   let baixaTotal = 0, baixa1 = 0, baixa2 = 0;
 
+  const shiftLists: Record<string, any[]> = {
+    desova1: [],
+    desova2: [],
+    desovaCross: [],
+    baixa1: [],
+    baixa2: []
+  };
+
   const rowsHtml = data.map((row) => {
     const op = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
     const status = normalizeText(row["STATUS"] || "");
-    const isDesova = op.includes("UNLOAD") || op.includes("DESOVA");
     const isBaixa = op.includes("SWAP") || op.includes("PUT DOWN") || op.includes("PUTDOWN") || op.includes("BAIXA") || op.includes("PISO");
+    const isDesova = !isBaixa; // All non-Baixa containers default to DESOVAS
 
     const startDt = toDateTimeMaybe(row["TERMINAL - INÍCIO DE ROTA"]);
     let endDt = toDateTimeMaybe(row["ENTREGA VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA"]);
     let fullTimeString = "-";
     let durationHours = 0;
 
-    const isBaixaCompleted = isBaixa && (status === "ENTREGUE" || startDt);
+    const isBaixaCompleted = isBaixa && startDt && status === "ENTREGUE";
+    const isDesovaCompleted = isDesova && startDt && endDt;
 
-    if (isDesova) desovaTotal++;
-    if (isBaixaCompleted) baixaTotal++;
-    
-    if (isBaixaCompleted && startDt) {
+    if (isBaixaCompleted) {
+      baixaTotal++;
       const sTime = startDt.getHours() * 100 + startDt.getMinutes();
-      const s1 = (sTime >= 630 && sTime <= 1500);
-      if (s1) baixa1++;
-      else baixa2++;
+      const s1 = (sTime < 1500);
+      if (s1) { baixa1++; shiftLists.baixa1.push(row); }
+      else { baixa2++; shiftLists.baixa2.push(row); }
+    }
+
+    if (isDesovaCompleted) {
+      desovaTotal++;
+      const sTime = startDt.getHours() * 100 + startDt.getMinutes();
+      const eTime = endDt.getHours() * 100 + endDt.getMinutes();
+      const s1 = (sTime < 1500);
+      const e1 = (eTime < 1500);
+      
+      if (s1 && e1) { desova1++; shiftLists.desova1.push(row); }
+      else if (!s1 && !e1) { desova2++; shiftLists.desova2.push(row); }
+      else if (s1 && !e1) { desovaCross++; shiftLists.desovaCross.push(row); }
+      else { desova2++; shiftLists.desova2.push(row); } // Fallback for 2nd->1st
     }
 
     if (startDt && endDt) {
-      const sTime = startDt.getHours() * 100 + startDt.getMinutes();
-      const eTime = endDt.getHours() * 100 + endDt.getMinutes();
-      
-      const s1 = (sTime >= 630 && sTime <= 1500);
-      const e1 = (eTime >= 630 && eTime <= 1500);
-      
-      if (isDesova) {
-        if (s1 && e1) desova1++;
-        else if (!s1 && !e1) desova2++;
-        else if (s1 && !e1) desovaCross++;
-      }
-
       const diffMs = endDt.getTime() - startDt.getTime();
       if (diffMs > -3600000) { // Small threshold for slight negative values due to clock drift
         durationHours = Math.max(0, diffMs / (1000 * 60 * 60));
@@ -3052,7 +3060,7 @@ function renderTimeTable(data: DeliveryRow[]) {
 
         totalTimeSum += durationHours; validRecords++;
         const timeVal = startDt.getHours() * 100 + startDt.getMinutes();
-        if (timeVal >= 630 && timeVal <= 1500) { 
+        if (timeVal < 1500) { 
           totalTimeSumP1 += durationHours; 
           validRecordsP1++; 
         } else { 
@@ -3072,6 +3080,8 @@ function renderTimeTable(data: DeliveryRow[]) {
         <td class="px-4 py-3 font-bold text-blue-600 dark:text-blue-400">${fullTimeString}</td>
       </tr>`;
   }).join("");
+
+  const totalCompletedOps = desovaTotal + baixaTotal;
 
   const scheduled = deliveryData.filter(d => normalizeText(d["STATUS"] || "") !== "CANCELADO").length;
   const delivered = deliveryData.filter(d => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
@@ -3135,6 +3145,8 @@ function renderTimeTable(data: DeliveryRow[]) {
   const targetTaktMins = Math.round(targetTaktTimeHrs * 60);
   const currentAvgMins = Math.round(avgHours * 60);
   const deviationMins = currentAvgMins - targetTaktMins;
+
+  (window as any).__SHIFT_LISTS__ = shiftLists;
 
   timeContent.innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -3247,41 +3259,41 @@ function renderTimeTable(data: DeliveryRow[]) {
           </div>
           <div class="space-y-5">
             
-            <div class="flex items-center">
+            <div class="flex items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 -mx-1.5 rounded transition-colors" onclick="window.showShiftDetails('desova1', 'DESOVAS - Realizadas inteiramente no 1º turno')">
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 1º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotal > 0 ? (desova1 / desovaTotal * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (desova1 / totalCompletedOps * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-green-600">${desova1}</span>
-                  <span class="text-[10px] font-bold text-green-600/70">(${desovaTotal > 0 ? (desova1 / desovaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-green-600/70">(${totalCompletedOps > 0 ? (desova1 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
             
-            <div class="flex items-center">
+            <div class="flex items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 -mx-1.5 rounded transition-colors" onclick="window.showShiftDetails('desova2', 'DESOVAS - Realizadas inteiramente no 2º turno')">
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 2º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotal > 0 ? (desova2 / desovaTotal * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (desova2 / totalCompletedOps * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-blue-600">${desova2}</span>
-                  <span class="text-[10px] font-bold text-blue-600/70">(${desovaTotal > 0 ? (desova2 / desovaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-blue-600/70">(${totalCompletedOps > 0 ? (desova2 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
 
-            <div class="flex items-center">
+            <div class="flex items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 -mx-1.5 rounded transition-colors" onclick="window.showShiftDetails('desovaCross', 'DESOVAS - Iniciadas no 1º turno e finalizadas no 2º turno')">
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Iniciadas no 1º turno e finalizadas no 2º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-orange-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotal > 0 ? (desovaCross / desovaTotal * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-orange-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (desovaCross / totalCompletedOps * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-orange-600">${desovaCross}</span>
-                  <span class="text-[10px] font-bold text-orange-600/70">(${desovaTotal > 0 ? (desovaCross / desovaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-orange-600/70">(${totalCompletedOps > 0 ? (desovaCross / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
@@ -3297,28 +3309,28 @@ function renderTimeTable(data: DeliveryRow[]) {
           </div>
           <div class="space-y-5">
             
-            <div class="flex items-center">
+            <div class="flex items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 -mx-1.5 rounded transition-colors" onclick="window.showShiftDetails('baixa1', 'BAIXA DE PISO - Realizadas inteiramente no 1º turno')">
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 1º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${baixaTotal > 0 ? (baixa1 / baixaTotal * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (baixa1 / totalCompletedOps * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-green-600">${baixa1}</span>
-                  <span class="text-[10px] font-bold text-green-600/70">(${baixaTotal > 0 ? (baixa1 / baixaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-green-600/70">(${totalCompletedOps > 0 ? (baixa1 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
             
-            <div class="flex items-center">
+            <div class="flex items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 p-1.5 -mx-1.5 rounded transition-colors" onclick="window.showShiftDetails('baixa2', 'BAIXA DE PISO - Realizadas inteiramente no 2º turno')">
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 2º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${baixaTotal > 0 ? (baixa2 / baixaTotal * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (baixa2 / totalCompletedOps * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-blue-600">${baixa2}</span>
-                  <span class="text-[10px] font-bold text-blue-600/70">(${baixaTotal > 0 ? (baixa2 / baixaTotal * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-blue-600/70">(${totalCompletedOps > 0 ? (baixa2 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
@@ -3463,6 +3475,68 @@ fileUpload?.addEventListener("change", (e) => {
   };
   reader.readAsArrayBuffer(file);
 });
+
+(window as any).showShiftDetails = (listKey: string, title: string) => {
+  const lists = (window as any).__SHIFT_LISTS__;
+  if (!lists || !lists[listKey] || lists[listKey].length === 0) {
+    showToast("Nenhum container encontrado para este filtro.", "info");
+    return;
+  }
+  const data = lists[listKey];
+
+  let modal = document.getElementById("shift-details-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "shift-details-modal";
+    modal.className = "fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 transition-all duration-300 hidden";
+    modal.innerHTML = `
+      <div class="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col relative transform transition-all duration-300">
+        <div class="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 id="shift-modal-title" class="text-lg font-bold text-slate-800 dark:text-slate-100">Containers</h2>
+          <button onclick="document.getElementById('shift-details-modal').classList.add('hidden')" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-2xl font-bold cursor-pointer leading-none">&times;</button>
+        </div>
+        <div class="overflow-y-auto p-4 custom-scrollbar">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 dark:bg-slate-700 sticky -top-4 shadow-sm z-10">
+              <tr>
+                <th class="px-4 py-3 font-bold uppercase text-slate-500">Container</th>
+                <th class="px-4 py-3 font-bold uppercase text-slate-500">Status</th>
+                <th class="px-4 py-3 font-bold uppercase text-slate-500">Escopo</th>
+                <th class="px-4 py-3 font-bold uppercase text-slate-500">Início</th>
+                <th class="px-4 py-3 font-bold uppercase text-slate-500">Fim</th>
+              </tr>
+            </thead>
+            <tbody id="shift-modal-tbody" class="divide-y divide-slate-100 dark:divide-slate-700">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  
+  modal.classList.remove("hidden");
+  const titleEl = document.getElementById("shift-modal-title");
+  if (titleEl) titleEl.textContent = title + ` (${data.length})`;
+
+  const tbody = document.getElementById("shift-modal-tbody");
+  if (tbody) {
+    tbody.innerHTML = data.map((row: any) => {
+      const startDt = toDateTimeMaybe(row["TERMINAL - INÍCIO DE ROTA"]);
+      let endDt = toDateTimeMaybe(row["ENTREGA VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA"]);
+      
+      return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+          <td class="px-4 py-3 font-mono font-bold text-slate-800 dark:text-slate-200">${row["CONTAINER"] || "-"}</td>
+          <td class="px-4 py-3 font-bold text-slate-700 dark:text-slate-300">${row["STATUS"] || "-"}</td>
+          <td class="px-4 py-3 text-[10px] text-slate-600 dark:text-slate-400">${row["OPERATION SCOPE"] || "-"}</td>
+          <td class="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">${startDt ? startDt.toLocaleString() : "-"}</td>
+          <td class="px-4 py-3 font-mono text-slate-600 dark:text-slate-400">${endDt ? endDt.toLocaleString() : "-"}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+};
 
 /* ------------------------------- EXPORTS ---------------------------------- */
 exportExcelBtn?.addEventListener("click", async () => {
