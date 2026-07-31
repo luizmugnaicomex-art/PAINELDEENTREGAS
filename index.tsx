@@ -67,6 +67,7 @@ const pbpFilterBtn = document.getElementById("pbp-filter-btn") as HTMLButtonElem
 const projectFilterBtn = document.getElementById("project-filter-btn") as HTMLButtonElement;
 const lotSearchInput = document.getElementById("lot-search-input") as HTMLInputElement;
 const lotSearchContainer = document.getElementById("lot-search-container") as HTMLDivElement;
+const monthFilterSelect = document.getElementById("month-filter-select") as HTMLSelectElement;
 const htmlEl = document.documentElement;
 
 /* ------------------------------- Logo Elements ----------------------------- */
@@ -1048,7 +1049,17 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   }
   const query = (searchInput?.value || "").trim().toLowerCase();
   const lotQuery = (lotSearchInput?.value || "").trim().toLowerCase();
+  const selectedMonth = monthFilterSelect?.value;
   let filteredData = deliveryData;
+
+  if (selectedMonth) {
+    const monthIndex = parseInt(selectedMonth, 10);
+    filteredData = filteredData.filter(row => {
+      const d = toDateMaybe(row["DELIVERY AT BYD"]);
+      if (!d) return false;
+      return d.getMonth() === monthIndex;
+    });
+  }
 
   if (showOnlyBattery) {
     filteredData = filteredData.filter(row => isBatteryRow(row));
@@ -1119,6 +1130,16 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
 function updateStats() {
   const isHistoryTabActive = document.querySelector(".view-tab-btn[data-tab='history']")?.classList.contains("border-blue-500") ?? false;
   let dataForStats = isHistoryTabActive ? historicalData : deliveryData;
+
+  const selectedMonth = monthFilterSelect?.value;
+  if (selectedMonth) {
+    const monthIndex = parseInt(selectedMonth, 10);
+    dataForStats = dataForStats.filter(row => {
+      const d = toDateMaybe(row["DELIVERY AT BYD"]);
+      if (!d) return false;
+      return d.getMonth() === monthIndex;
+    });
+  }
 
   if (showOnlyBattery) {
     dataForStats = dataForStats.filter(row => isBatteryRow(row));
@@ -1771,6 +1792,16 @@ lotSearchInput?.addEventListener("input", () => {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = window.setTimeout(applyFiltersAndRender, 250);
 });
+
+monthFilterSelect?.addEventListener("change", () => {
+  applyFiltersAndRender();
+});
+
+(window as any).pontoApoioQtd = 0;
+(window as any).updatePontoApoio = (val: string) => { 
+  (window as any).pontoApoioQtd = parseInt(val, 10) || 0; 
+  applyFiltersAndRender(); 
+};
 
 function resetCategoryButtonsUI() {
   [batteryFilterBtn, kdFilterBtn, spFilterBtn, pbpFilterBtn, projectFilterBtn].forEach(btn => {
@@ -2445,7 +2476,18 @@ function renderHistoryTab() {
     };
   }
 
-  if (historicalData.length === 0) {
+  const selectedMonth = monthFilterSelect?.value;
+  let filteredHistory = historicalData;
+  if (selectedMonth) {
+    const monthIndex = parseInt(selectedMonth, 10);
+    filteredHistory = filteredHistory.filter(row => {
+      const d = toDateMaybe(row["DELIVERY AT BYD"]);
+      if (!d) return false;
+      return d.getMonth() === monthIndex;
+    });
+  }
+
+  if (filteredHistory.length === 0) {
     historyContent.innerHTML = `<div class="text-center py-20 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
       <i class="fas fa-archive text-6xl text-slate-300 dark:text-slate-600 mb-4"></i>
       <h2 class="text-2xl font-semibold text-slate-700 dark:text-slate-200">${t("noResultsTitle")}</h2>
@@ -2455,7 +2497,7 @@ function renderHistoryTab() {
   }
 
   // Group historical data by Date
-  const groupedByDate = historicalData.reduce((acc, row) => {
+  const groupedByDate = filteredHistory.reduce((acc, row) => {
     const d = toDateMaybe(row["DELIVERY AT BYD"]);
     const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : (String(row["DELIVERY AT BYD"] || "").trim() || t("undefinedDate"));
     if (!acc[key]) acc[key] = [];
@@ -3005,6 +3047,7 @@ function renderTimeTable(data: DeliveryRow[]) {
   
   let desovaTotal = 0, desova1 = 0, desova2 = 0, desovaCross = 0;
   let baixaTotal = 0, baixa1 = 0, baixa2 = 0;
+  let desovaTotalScheduled = 0, baixaTotalScheduled = 0;
 
   const shiftLists: Record<string, any[]> = {
     desova1: [],
@@ -3019,6 +3062,11 @@ function renderTimeTable(data: DeliveryRow[]) {
     const status = normalizeText(row["STATUS"] || "");
     const isBaixa = op.includes("SWAP") || op.includes("PUT DOWN") || op.includes("PUTDOWN") || op.includes("BAIXA") || op.includes("PISO");
     const isDesova = !isBaixa; // All non-Baixa containers default to DESOVAS
+
+    if (status !== "CANCELADO") {
+      if (isBaixa) baixaTotalScheduled++;
+      if (isDesova) desovaTotalScheduled++;
+    }
 
     const startDt = toDateTimeMaybe(row["TERMINAL - INÍCIO DE ROTA"]);
     let endDt = toDateTimeMaybe(row["ENTREGA VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA"]);
@@ -3085,6 +3133,10 @@ function renderTimeTable(data: DeliveryRow[]) {
 
   const scheduled = deliveryData.filter(d => normalizeText(d["STATUS"] || "") !== "CANCELADO").length;
   const delivered = deliveryData.filter(d => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
+  
+  const kpiEntregues = delivered;
+  const deltaApoio = kpiEntregues - totalCompletedOps;
+  const taxaAbsorcao = kpiEntregues > 0 ? (totalCompletedOps / kpiEntregues * 100).toFixed(1) : 0;
   const remaining = deliveryData.filter(d => {
     const s = normalizeText(d["STATUS"] || "");
     return s === "PENDENTE" || s === "AGUARDANDO DESOVA" || s === "A CAMINHO";
@@ -3147,6 +3199,14 @@ function renderTimeTable(data: DeliveryRow[]) {
   const deviationMins = currentAvgMins - targetTaktMins;
 
   (window as any).__SHIFT_LISTS__ = shiftLists;
+
+  const pontoApoioQtd = (window as any).pontoApoioQtd || 0;
+  const transitTime = 0.5; // 30 mins
+  const consumoTransito = currentThroughput * transitTime;
+  const loteSugerido = Math.min(pontoApoioQtd, Math.ceil(currentThroughput * 1.0));
+  const saldoProjetado = pontoApoioQtd - loteSugerido;
+  const isPontoApoioWarning = pontoApoioQtd < consumoTransito;
+  const isPontoApoioHealthy = !isPontoApoioWarning && pontoApoioQtd >= loteSugerido;
 
   timeContent.innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -3263,11 +3323,11 @@ function renderTimeTable(data: DeliveryRow[]) {
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 1º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (desova1 / totalCompletedOps * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotalScheduled > 0 ? (desova1 / desovaTotalScheduled * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-green-600">${desova1}</span>
-                  <span class="text-[10px] font-bold text-green-600/70">(${totalCompletedOps > 0 ? (desova1 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-green-600/70">(${desovaTotalScheduled > 0 ? (desova1 / desovaTotalScheduled * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
@@ -3276,11 +3336,11 @@ function renderTimeTable(data: DeliveryRow[]) {
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 2º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (desova2 / totalCompletedOps * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotalScheduled > 0 ? (desova2 / desovaTotalScheduled * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-blue-600">${desova2}</span>
-                  <span class="text-[10px] font-bold text-blue-600/70">(${totalCompletedOps > 0 ? (desova2 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-blue-600/70">(${desovaTotalScheduled > 0 ? (desova2 / desovaTotalScheduled * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
@@ -3289,11 +3349,11 @@ function renderTimeTable(data: DeliveryRow[]) {
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Iniciadas no 1º turno e finalizadas no 2º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-orange-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (desovaCross / totalCompletedOps * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-orange-500 rounded-r-md transition-all duration-500" style="width: ${desovaTotalScheduled > 0 ? (desovaCross / desovaTotalScheduled * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-orange-600">${desovaCross}</span>
-                  <span class="text-[10px] font-bold text-orange-600/70">(${totalCompletedOps > 0 ? (desovaCross / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-orange-600/70">(${desovaTotalScheduled > 0 ? (desovaCross / desovaTotalScheduled * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
@@ -3313,11 +3373,11 @@ function renderTimeTable(data: DeliveryRow[]) {
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 1º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (baixa1 / totalCompletedOps * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-green-500 rounded-r-md transition-all duration-500" style="width: ${baixaTotalScheduled > 0 ? (baixa1 / baixaTotalScheduled * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-green-600">${baixa1}</span>
-                  <span class="text-[10px] font-bold text-green-600/70">(${totalCompletedOps > 0 ? (baixa1 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-green-600/70">(${baixaTotalScheduled > 0 ? (baixa1 / baixaTotalScheduled * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
@@ -3326,15 +3386,67 @@ function renderTimeTable(data: DeliveryRow[]) {
               <div class="w-32 text-xs font-semibold text-slate-600 dark:text-slate-400 pr-2 leading-tight">Realizadas inteiramente no 2º turno</div>
               <div class="flex-1 flex items-center gap-3">
                 <div class="flex-1 h-6 bg-slate-100 dark:bg-slate-700 rounded-r-md overflow-hidden relative">
-                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${totalCompletedOps > 0 ? (baixa2 / totalCompletedOps * 100) : 0}%"></div>
+                  <div class="absolute top-0 left-0 h-full bg-blue-500 rounded-r-md transition-all duration-500" style="width: ${baixaTotalScheduled > 0 ? (baixa2 / baixaTotalScheduled * 100) : 0}%"></div>
                 </div>
                 <div class="w-16 text-right flex flex-col items-end leading-tight">
                   <span class="text-sm font-black text-blue-600">${baixa2}</span>
-                  <span class="text-[10px] font-bold text-blue-600/70">(${totalCompletedOps > 0 ? (baixa2 / totalCompletedOps * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
+                  <span class="text-[10px] font-bold text-blue-600/70">(${baixaTotalScheduled > 0 ? (baixa2 / baixaTotalScheduled * 100).toFixed(1).replace('.', ',') : "0,0"}%)</span>
                 </div>
               </div>
             </div>
 
+          </div>
+        </div>
+
+        <!-- Card 3: TOTAL & APOIO -->
+        <div class="flex-none xl:w-80 bg-slate-900 dark:bg-slate-950 rounded-lg shadow-sm border border-slate-700 dark:border-slate-800 p-5 text-white flex flex-col justify-center relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-4 opacity-10">
+            <i class="fas fa-truck-loading text-6xl"></i>
+          </div>
+          
+          <div class="relative z-10">
+            <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total de Recebimentos</h4>
+            <div class="text-4xl font-black text-white mb-6">${totalCompletedOps}</div>
+            
+            <div class="pt-4 border-t border-slate-700/50 space-y-3">
+              <h4 class="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2">Controle do Ponto de Apoio (Staging)</h4>
+              
+              <div class="flex items-center justify-between bg-slate-800/50 p-2 rounded-md border border-slate-700">
+                <label for="ponto-apoio-input" class="text-xs font-semibold text-slate-300">No Ponto de Apoio (Qtd. Manual):</label>
+                <input id="ponto-apoio-input" type="number" min="0" value="${pontoApoioQtd}" 
+                       oninput="window.updatePontoApoio(this.value)"
+                       class="w-16 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm font-bold text-white text-center focus:outline-none focus:border-blue-500" />
+              </div>
+
+              <div class="bg-${isPontoApoioWarning ? 'yellow' : (isPontoApoioHealthy ? 'emerald' : 'slate')}-500/10 border border-${isPontoApoioWarning ? 'yellow' : (isPontoApoioHealthy ? 'emerald' : 'slate')}-500/30 rounded-md p-3 mt-3">
+                <div class="flex flex-col gap-1.5">
+                  <div class="flex items-start gap-2">
+                    <i class="fas ${isPontoApoioWarning ? 'fa-exclamation-triangle text-yellow-400' : 'fa-check-circle text-emerald-400'} mt-0.5 text-xs"></i>
+                    <div>
+                      <span class="block text-xs font-bold text-${isPontoApoioWarning ? 'yellow' : (isPontoApoioHealthy ? 'emerald' : 'slate')}-300">Sugestão de Liberação Agora:</span>
+                      <span class="block text-lg font-black text-white mt-1">
+                        Liberar ${loteSugerido} contêineres
+                      </span>
+                    </div>
+                  </div>
+                  <div class="mt-2 text-[10px] text-slate-300 space-y-1">
+                    <div class="flex justify-between">
+                      <span class="text-slate-400">Tempo Estimado (ETA):</span>
+                      <span class="font-semibold text-white">20–30 min (Just-In-Time)</span>
+                    </div>
+                    <div class="flex justify-between">
+                      <span class="text-slate-400">Saldo Restante no Apoio:</span>
+                      <span class="font-semibold text-white">${saldoProjetado}</span>
+                    </div>
+                  </div>
+                  ${isPontoApoioWarning ? `
+                  <div class="mt-2 text-[10px] font-bold text-yellow-400 bg-yellow-400/10 p-1.5 rounded border border-yellow-400/20">
+                    Risco de parada na BYD em 30 min por falta de carretas
+                  </div>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -3710,8 +3822,16 @@ function renderParetoTab() {
   const paretoContent = document.getElementById("pareto-content");
   if (!paretoContent) return;
 
-  // Combine historical and current day data
-  const allData = [...historicalData, ...deliveryData];
+  let allData = [...historicalData, ...deliveryData];
+  const selectedMonth = monthFilterSelect?.value;
+  if (selectedMonth) {
+    const monthIndex = parseInt(selectedMonth, 10);
+    allData = allData.filter(row => {
+      const d = toDateMaybe(row["DELIVERY AT BYD"]);
+      if (!d) return false;
+      return d.getMonth() === monthIndex;
+    });
+  }
   
   if (allData.length === 0) {
     paretoContent.innerHTML = `<div class="text-center py-20 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
@@ -3744,16 +3864,31 @@ function renderParetoTab() {
     return `Semana: ${startOfWeek.getDate().toString().padStart(2, '0')}/${(startOfWeek.getMonth() + 1).toString().padStart(2, '0')} a ${endOfWeek.getDate().toString().padStart(2, '0')}/${(endOfWeek.getMonth() + 1).toString().padStart(2, '0')}`;
   };
 
+  const getMonthLabel = (dateStr: string) => {
+    if (dateStr === t("undefinedDate")) return dateStr;
+    const d = new Date(dateStr + "T12:00:00");
+    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    return `Mês: ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+  };
+
   const weeksMap: Record<string, string[]> = {};
   sortedDatesAsc.forEach(d => {
     const w = getWeekLabel(d);
     if (!weeksMap[w]) weeksMap[w] = [];
     if (!weeksMap[w].includes(d)) weeksMap[w].push(d);
+    
+    const m = getMonthLabel(d);
+    if (!weeksMap[m]) weeksMap[m] = [];
+    if (!weeksMap[m].includes(d)) weeksMap[m].push(d);
   });
 
-  const availableWeeks = Object.keys(weeksMap);
-  if (!paretoSelectedWeek && availableWeeks.length > 0) {
-    paretoSelectedWeek = availableWeeks[availableWeeks.length - 1]; // default to latest week
+  const availablePeriods = Object.keys(weeksMap);
+  const availableWeeks = availablePeriods.filter(p => p.startsWith("Semana"));
+  const availableMonths = availablePeriods.filter(p => p.startsWith("Mês"));
+  const sortedPeriods = [...availableWeeks, ...availableMonths];
+
+  if (!paretoSelectedWeek && sortedPeriods.length > 0) {
+    paretoSelectedWeek = availableWeeks.length > 0 ? availableWeeks[availableWeeks.length - 1] : sortedPeriods[sortedPeriods.length - 1]; // default to latest week
   }
 
   const datesInSelectedWeek = paretoSelectedWeek ? (weeksMap[paretoSelectedWeek] || []) : [];
@@ -3888,7 +4023,12 @@ function renderParetoTab() {
         <div class="flex items-center gap-2">
           <i class="fas fa-calendar-alt text-slate-400"></i>
           <select id="pareto-week-select" class="border border-slate-300 dark:border-slate-600 rounded p-2 text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-            ${availableWeeks.map(w => `<option value="${w}" ${w === paretoSelectedWeek ? 'selected' : ''}>${w}</option>`).join('')}
+            <optgroup label="Semanas">
+              ${availableWeeks.map(w => `<option value="${w}" ${w === paretoSelectedWeek ? 'selected' : ''}>${w}</option>`).join('')}
+            </optgroup>
+            <optgroup label="Meses">
+              ${availableMonths.map(m => `<option value="${m}" ${m === paretoSelectedWeek ? 'selected' : ''}>${m}</option>`).join('')}
+            </optgroup>
           </select>
         </div>
         
