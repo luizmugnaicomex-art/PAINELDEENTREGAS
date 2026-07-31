@@ -3203,10 +3203,39 @@ function renderTimeTable(data: DeliveryRow[]) {
   const pontoApoioQtd = (window as any).pontoApoioQtd || 0;
   const transitTime = 0.5; // 30 mins
   const consumoTransito = currentThroughput * transitTime;
-  const loteSugerido = Math.min(pontoApoioQtd, Math.ceil(currentThroughput * 1.0));
+  const taxaAbsorcaoNum = parseFloat(String(taxaAbsorcao));
+  
+  const isPontoApoioHold = taxaAbsorcaoNum > 0 && taxaAbsorcaoNum <= 60;
+  const loteSugerido = isPontoApoioHold ? 0 : Math.min(pontoApoioQtd, Math.ceil(currentThroughput * 1.0));
+  
   const saldoProjetado = pontoApoioQtd - loteSugerido;
-  const isPontoApoioWarning = pontoApoioQtd < consumoTransito;
-  const isPontoApoioHealthy = !isPontoApoioWarning && pontoApoioQtd >= loteSugerido;
+  const isPontoApoioWarning = !isPontoApoioHold && pontoApoioQtd < consumoTransito;
+  const isPontoApoioHealthy = !isPontoApoioHold && !isPontoApoioWarning && pontoApoioQtd >= loteSugerido;
+
+  let stateColor = 'slate';
+  let stateIcon = 'fa-info-circle';
+  let stateTitle = 'Sugestão de Liberação Agora:';
+  let stateMessage = `Liberar ${loteSugerido} contêineres`;
+  let stateExtra = '';
+
+  if (isPontoApoioHold) {
+    stateColor = 'red';
+    stateIcon = 'fa-hand-paper';
+    stateTitle = 'AÇÃO NECESSÁRIA:';
+    stateMessage = 'SEGURAR NO PONTO DE APOIO';
+    stateExtra = `<div class="mt-2 text-[10px] font-bold text-red-400 bg-red-400/10 p-1.5 rounded border border-red-400/20">
+      Baixa velocidade de drenagem no terminal (${taxaAbsorcao}%). Aguarde a absorção do fluxo atual antes de liberar novas carretas.
+    </div>`;
+  } else if (isPontoApoioWarning) {
+    stateColor = 'yellow';
+    stateIcon = 'fa-exclamation-triangle';
+    stateExtra = `<div class="mt-2 text-[10px] font-bold text-yellow-400 bg-yellow-400/10 p-1.5 rounded border border-yellow-400/20">
+      Risco de parada na BYD em 30 min por falta de carretas
+    </div>`;
+  } else if (isPontoApoioHealthy) {
+    stateColor = 'emerald';
+    stateIcon = 'fa-check-circle';
+  }
 
   timeContent.innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -3418,14 +3447,14 @@ function renderTimeTable(data: DeliveryRow[]) {
                        class="w-16 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm font-bold text-white text-center focus:outline-none focus:border-blue-500" />
               </div>
 
-              <div class="bg-${isPontoApoioWarning ? 'yellow' : (isPontoApoioHealthy ? 'emerald' : 'slate')}-500/10 border border-${isPontoApoioWarning ? 'yellow' : (isPontoApoioHealthy ? 'emerald' : 'slate')}-500/30 rounded-md p-3 mt-3">
+              <div class="bg-${stateColor}-500/10 border border-${stateColor}-500/30 rounded-md p-3 mt-3">
                 <div class="flex flex-col gap-1.5">
                   <div class="flex items-start gap-2">
-                    <i class="fas ${isPontoApoioWarning ? 'fa-exclamation-triangle text-yellow-400' : 'fa-check-circle text-emerald-400'} mt-0.5 text-xs"></i>
+                    <i class="fas ${stateIcon} text-${stateColor}-400 mt-0.5 text-xs"></i>
                     <div>
-                      <span class="block text-xs font-bold text-${isPontoApoioWarning ? 'yellow' : (isPontoApoioHealthy ? 'emerald' : 'slate')}-300">Sugestão de Liberação Agora:</span>
+                      <span class="block text-xs font-bold text-${stateColor}-300">${stateTitle}</span>
                       <span class="block text-lg font-black text-white mt-1">
-                        Liberar ${loteSugerido} contêineres
+                        ${stateMessage}
                       </span>
                     </div>
                   </div>
@@ -3439,11 +3468,7 @@ function renderTimeTable(data: DeliveryRow[]) {
                       <span class="font-semibold text-white">${saldoProjetado}</span>
                     </div>
                   </div>
-                  ${isPontoApoioWarning ? `
-                  <div class="mt-2 text-[10px] font-bold text-yellow-400 bg-yellow-400/10 p-1.5 rounded border border-yellow-400/20">
-                    Risco de parada na BYD em 30 min por falta de carretas
-                  </div>
-                  ` : ''}
+                  ${stateExtra}
                 </div>
               </div>
             </div>
