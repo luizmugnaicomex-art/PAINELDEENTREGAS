@@ -514,6 +514,8 @@ let maxLotChart: any = null;
 let modelChart: any = null;
 let historyDailyChart: any = null;
 let historyWeeklyChart: any = null;
+let operacionalDiariaChart: any = null;
+let operacionalTransportadorasChart: any = null;
 let selectedHistoryDate: string | null = null;
 let selectedHistoryWeek: string | null = null;
 let carrierCharts: any[] = [];
@@ -2624,6 +2626,25 @@ function renderHistoryTab() {
           </button>
         </div>
       </div>
+
+      <!-- NOVOS GRÁFICOS DE PERFORMANCE OPERACIONAL -->
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <!-- Gráfico 1: Análise de Performance Operacional Diária -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[350px]">
+          <div class="bg-slate-700 text-white font-bold text-center py-2 text-sm uppercase">Análise de Performance Operacional Diária</div>
+          <div class="p-4 flex-1 relative min-h-[260px]">
+             <canvas id="operacionalDiariaChartCanvas"></canvas>
+          </div>
+        </div>
+        
+        <!-- Gráfico 2: Análise de Performance Operacional das Transportadoras -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[350px]">
+          <div class="bg-slate-700 text-white font-bold text-center py-2 text-sm uppercase">Análise de Performance Operacional das Transportadoras</div>
+          <div class="p-4 flex-1 relative min-h-[260px]">
+             <canvas id="operacionalTransportadorasChartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
       
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[400px]">
@@ -3029,6 +3050,328 @@ function renderHistoryTab() {
         scales: {
           y: { beginAtZero: true, max: 100, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { stepSize: 20, callback: (v) => v + "%" } },
           x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+  }
+
+  // Render Operational Charts (Análise de Performance Operacional Diária & Transportadoras)
+  const formatToDayMonth = (dateStr: string) => {
+    if (dateStr === t("undefinedDate")) return dateStr;
+    const d = new Date(dateStr + "T12:00:00");
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, "0");
+    const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    return `${day}/${months[d.getMonth()]}`;
+  };
+
+  const isDark = document.documentElement.classList.contains("dark");
+  const textColor = isDark ? "#cbd5e1" : "#334155";
+  const gridColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+
+  // 1. Análise de Performance Operacional Diária
+  const ctxOperacionalDiaria = document.getElementById("operacionalDiariaChartCanvas") as HTMLCanvasElement;
+  if (ctxOperacionalDiaria) {
+    if (operacionalDiariaChart) operacionalDiariaChart.destroy();
+
+    const dailyDataPoints = datesInSelectedWeek.map(dateKey => {
+      const items = groupedByDate[dateKey] || [];
+      const total = items.length;
+      const delivered = items.filter(r => normalizeText(r["STATUS"] || "") === "ENTREGUE").length;
+      const backlog = total - delivered;
+      const perf = total > 0 ? (delivered / total) * 100 : 0;
+      return {
+        label: formatToDayMonth(dateKey),
+        entregues: delivered,
+        backlog: backlog,
+        performance: perf
+      };
+    });
+
+    let sumEntregues = 0;
+    let sumBacklog = 0;
+    let sumPerformance = 0;
+    const daysCount = dailyDataPoints.length;
+    dailyDataPoints.forEach(pt => {
+      sumEntregues += pt.entregues;
+      sumBacklog += pt.backlog;
+      sumPerformance += pt.performance;
+    });
+
+    const avgEntregues = daysCount > 0 ? Math.round((sumEntregues / daysCount) * 10) / 10 : 0;
+    const avgBacklog = daysCount > 0 ? Math.round((sumBacklog / daysCount) * 10) / 10 : 0;
+    const avgPerformance = daysCount > 0 ? Math.round((sumPerformance / daysCount) * 10) / 10 : 0;
+
+    const labelsDiaria = dailyDataPoints.map(pt => pt.label).concat(["Average"]);
+    const entreguesDiaria = dailyDataPoints.map(pt => pt.entregues).concat([avgEntregues]);
+    const backlogDiaria = dailyDataPoints.map(pt => pt.backlog).concat([avgBacklog]);
+    const performanceDiaria = dailyDataPoints.map(pt => pt.performance).concat([avgPerformance]);
+
+    let maxTotalVal = 300;
+    dailyDataPoints.forEach(pt => {
+      const total = pt.entregues + pt.backlog;
+      if (total > maxTotalVal) maxTotalVal = total;
+    });
+    const computedYMax = Math.ceil((maxTotalVal + 50) / 50) * 50;
+
+    operacionalDiariaChart = new Chart(ctxOperacionalDiaria, {
+      type: "bar",
+      data: {
+        labels: labelsDiaria,
+        datasets: [
+          {
+            type: "bar",
+            label: "Entregues",
+            data: entreguesDiaria,
+            backgroundColor: "#1e3a8a", // Dark blue
+            stack: "stack1",
+            barPercentage: 0.55,
+            categoryPercentage: 0.8,
+            order: 2,
+            datalabels: {
+              color: "#ffffff",
+              anchor: "center",
+              align: "center",
+              font: { size: 10, weight: "bold" },
+              formatter: (val: any) => val > 0 ? val : ""
+            }
+          },
+          {
+            type: "bar",
+            label: "Backlog",
+            data: backlogDiaria,
+            backgroundColor: "#fdba74", // Soft orange
+            stack: "stack1",
+            barPercentage: 0.55,
+            categoryPercentage: 0.8,
+            order: 3,
+            datalabels: {
+              color: "#7c2d12", // Dark orange text
+              anchor: "center",
+              align: "center",
+              font: { size: 10, weight: "bold" },
+              formatter: (val: any) => val > 0 ? val : ""
+            }
+          },
+          {
+            type: "line",
+            label: "Performance Dia",
+            data: performanceDiaria,
+            borderColor: "#94a3b8", // Slate-400
+            backgroundColor: "#94a3b8",
+            borderWidth: 2,
+            tension: 0.1,
+            yAxisID: "y1",
+            order: 1,
+            pointBackgroundColor: "#475569",
+            pointBorderColor: "#ffffff",
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            datalabels: {
+              color: textColor,
+              anchor: "end",
+              align: "top",
+              offset: 8,
+              font: { size: 10, weight: "bold" },
+              formatter: (val: any) => val > 0 ? val.toFixed(1) + "%" : "0.0%"
+            }
+          },
+          {
+            type: "line",
+            label: "Meta 300 Ctnr",
+            data: labelsDiaria.map(() => 300),
+            borderColor: "#ef4444", // Red
+            borderWidth: 2,
+            borderDash: [6, 6],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            order: 4,
+            datalabels: {
+              display: false
+            }
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              boxWidth: 12,
+              font: { size: 10, weight: "bold" },
+              color: textColor
+            }
+          },
+          tooltip: {
+            mode: "index",
+            intersect: false
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            grid: { display: false },
+            ticks: { font: { size: 10, weight: "bold" }, color: textColor }
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            max: computedYMax,
+            grid: { color: gridColor },
+            ticks: { font: { size: 10 }, color: textColor }
+          },
+          y1: {
+            position: "right",
+            beginAtZero: true,
+            max: 120,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              stepSize: 20,
+              font: { size: 10 },
+              color: textColor,
+              callback: (val: any) => val + "%"
+            }
+          }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+  }
+
+  // 2. Análise de Performance Operacional das Transportadoras
+  const ctxOperacionalTransportadoras = document.getElementById("operacionalTransportadorasChartCanvas") as HTMLCanvasElement;
+  if (ctxOperacionalTransportadoras) {
+    if (operacionalTransportadorasChart) operacionalTransportadorasChart.destroy();
+
+    const labelsCarrier = weeklyCarriers;
+    const entreguesCarrier = weeklyCarriers.map(c => weeklyByCarrier[c].entregues);
+    const backlogCarrier = weeklyCarriers.map(c => weeklyByCarrier[c].backlog);
+    const performanceCarrier = weeklyCarriers.map(c => {
+      const data = weeklyByCarrier[c];
+      const total = data.entregues + data.backlog;
+      return total > 0 ? (data.entregues / total) * 100 : 0;
+    });
+
+    operacionalTransportadorasChart = new Chart(ctxOperacionalTransportadoras, {
+      type: "bar",
+      data: {
+        labels: labelsCarrier,
+        datasets: [
+          {
+            type: "bar",
+            label: "Entregues",
+            data: entreguesCarrier,
+            backgroundColor: "#15803d", // Green
+            barPercentage: 0.6,
+            categoryPercentage: 0.6,
+            order: 2,
+            datalabels: {
+              color: "#ffffff",
+              anchor: "end",
+              align: "top",
+              font: { size: 10, weight: "bold" },
+              formatter: (val: any) => val > 0 ? val : ""
+            }
+          },
+          {
+            type: "bar",
+            label: "Backlog",
+            data: backlogCarrier,
+            backgroundColor: "#6b7280", // Gray
+            barPercentage: 0.6,
+            categoryPercentage: 0.6,
+            order: 3,
+            datalabels: {
+              color: "#ffffff",
+              anchor: "end",
+              align: "top",
+              font: { size: 10, weight: "bold" },
+              formatter: (val: any) => val > 0 ? val : ""
+            }
+          },
+          {
+            type: "line",
+            label: "Performance",
+            data: performanceCarrier,
+            borderColor: "#94a3b8", // Slate-400
+            backgroundColor: "#94a3b8",
+            borderWidth: 2,
+            tension: 0.1,
+            yAxisID: "y1",
+            order: 1,
+            pointBackgroundColor: "#475569",
+            pointBorderColor: "#ffffff",
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            datalabels: {
+              color: textColor,
+              anchor: "end",
+              align: "top",
+              offset: 8,
+              font: { size: 10, weight: "bold" },
+              formatter: (val: any) => val > 0 ? val.toFixed(1) + "%" : "0.0%"
+            }
+          },
+          {
+            type: "line",
+            label: "Meta",
+            data: labelsCarrier.map(() => 100),
+            borderColor: "#1d4ed8", // Blue
+            borderWidth: 2,
+            borderDash: [6, 6],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            order: 4,
+            datalabels: {
+              display: false
+            }
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              boxWidth: 12,
+              font: { size: 10, weight: "bold" },
+              color: textColor
+            }
+          },
+          tooltip: {
+            mode: "index",
+            intersect: false
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10, weight: "bold" }, color: textColor }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: gridColor },
+            ticks: { font: { size: 10 }, color: textColor }
+          },
+          y1: {
+            position: "right",
+            beginAtZero: true,
+            max: 120,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              stepSize: 20,
+              font: { size: 10 },
+              color: textColor,
+              callback: (val: any) => val + "%"
+            }
+          }
         }
       },
       plugins: [ChartDataLabels]
