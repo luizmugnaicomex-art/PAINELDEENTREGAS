@@ -887,6 +887,21 @@ function toDateMaybe(v: any): Date | null {
   return null;
 }
 
+function isRowCompletedInOperationalTime(row: any): boolean {
+  const op = String(row["OPERATION SCOPE"] || "").trim().toUpperCase();
+  const status = normalizeText(row["STATUS"] || "");
+  const isBaixa = op.includes("SWAP") || op.includes("PUT DOWN") || op.includes("PUTDOWN") || op.includes("BAIXA") || op.includes("PISO");
+  
+  const startDt = toDateTimeMaybe(row["TERMINAL - INÍCIO DE ROTA"]);
+  const endDt = toDateTimeMaybe(row["ENTREGA VAZIO"]) || toDateTimeMaybe(row["DATA E HORARIO DE DESCARGA"]);
+
+  if (isBaixa) {
+    return !!(startDt && status === "ENTREGUE");
+  } else {
+    return !!(startDt && endDt);
+  }
+}
+
 function formatDate(v: any): string {
   const d = toDateMaybe(v);
   if (!d) return String(safeValue(v) || t("dateNotAvailable"));
@@ -1089,6 +1104,16 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
         const status = normalizeText(row["STATUS"] || "");
         return !["ENTREGUE", "A CAMINHO", "ADIADO", "CANCELADO", "AGUARDANDO DESOVA"].includes(status);
       });
+    } else if (activeStatusFilter === "ENTREGUE") {
+      filteredData = filteredData.filter((row) => {
+        const status = normalizeText(row["STATUS"] || "");
+        return status === "ENTREGUE" && isRowCompletedInOperationalTime(row);
+      });
+    } else if (activeStatusFilter === "AGUARDANDO DESOVA") {
+      filteredData = filteredData.filter((row) => {
+        const status = normalizeText(row["STATUS"] || "");
+        return status === "AGUARDANDO DESOVA" || (status === "ENTREGUE" && !isRowCompletedInOperationalTime(row));
+      });
     } else {
       filteredData = filteredData.filter((row) => normalizeText(row["STATUS"] || "") === activeStatusFilter);
     }
@@ -1160,12 +1185,15 @@ function updateStats() {
   }
 
   const total = dataForStats.length;
-  const delivered = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "ENTREGUE").length;
+  const delivered = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "ENTREGUE" && isRowCompletedInOperationalTime(d)).length;
   const inTransit = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "A CAMINHO").length;
   const postponed = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "ADIADO").length;
   const canceled = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "CANCELADO").length;
   const backlog = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "BACKLOG").length;
-  const awaitingUnload = dataForStats.filter((d) => normalizeText(d["STATUS"] || "") === "AGUARDANDO DESOVA").length;
+  const awaitingUnload = dataForStats.filter((d) => 
+    normalizeText(d["STATUS"] || "") === "AGUARDANDO DESOVA" || 
+    (normalizeText(d["STATUS"] || "") === "ENTREGUE" && !isRowCompletedInOperationalTime(d))
+  ).length;
   const pending = Math.max(0, total - delivered - inTransit - postponed - canceled - awaitingUnload - backlog);
 
   const getPercentage = (count: number) => total === 0 ? "0%" : `${((count / total) * 100).toFixed(1)}%`;
@@ -1196,10 +1224,13 @@ function updateStats() {
       <div class="bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
         <i class="fas fa-check-circle text-sm"></i>
       </div>
-      <div class="min-w-0">
+      <div class="min-w-0 flex-1">
         <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("delivered")}">${t("delivered")}</div>
-        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${delivered}</div>
-        <div class="text-[9px] font-bold text-green-600 dark:text-green-400">${getPercentage(delivered)}</div>
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${delivered}</span>
+          <span class="text-[9px] font-bold text-green-600 dark:text-green-400">${getPercentage(delivered)}</span>
+        </div>
+        <div class="text-[8px] text-slate-400 dark:text-slate-500 font-medium leading-none mt-0.5 truncate" title="${currentLanguage === "pt" ? "Apenas containers já descarregados no Tempo de Operação" : "Only containers unloaded in Operation Time"}">${currentLanguage === "pt" ? "Descarregados" : "Unloaded"}</div>
       </div>
     </div>
 
@@ -1207,10 +1238,13 @@ function updateStats() {
       <div class="bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0">
         <i class="fas fa-box text-sm"></i>
       </div>
-      <div class="min-w-0">
+      <div class="min-w-0 flex-1">
         <div class="text-slate-500 dark:text-slate-400 text-[9px] font-semibold uppercase tracking-wider truncate" title="${t("awaitingUnload")}">${t("awaitingUnload")}</div>
-        <div class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${awaitingUnload}</div>
-        <div class="text-[9px] font-bold text-purple-600 dark:text-purple-400">${getPercentage(awaitingUnload)}</div>
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-lg font-extrabold text-slate-800 dark:text-slate-100">${awaitingUnload}</span>
+          <span class="text-[9px] font-bold text-purple-600 dark:text-purple-400">${getPercentage(awaitingUnload)}</span>
+        </div>
+        <div class="text-[8px] text-slate-400 dark:text-slate-500 font-medium leading-none mt-0.5 truncate" title="${currentLanguage === "pt" ? "Manual + (Entregues não descarregados)" : "Manual + (Delivered but not unloaded)"}">${currentLanguage === "pt" ? "Não Descarregados" : "Not Unloaded"}</div>
       </div>
     </div>
 
