@@ -3903,6 +3903,7 @@ fileUpload?.addEventListener("change", (e) => {
         EMPTY_DELIVERED: pickIndex(headerIndex, ["DATA E HORARIO DE ENTREGA CONTAINER VAZIO", "ENTREGA VAZIO", "ENTREGA CONTAINER VAZIO", "DATA DEVOLUCAO VAZIO"]),
         UNLOAD_AT_BYD: pickIndex(headerIndex, ["DATA E HORARIO DE DESCARGA NA BYD ", "DESCARGA BYD", "DESCARGA", "DATA E HORARIO DE DESCARGA"]),
         NOTES: pickIndex(headerIndex, ["NOTES", "OBSERVACOES", "OBSERVAÇÕES", "OBS"]),
+        PARETO: pickIndex(headerIndex, ["PARETO", "MOTIVO PARETO", "MOTIVO", "REASON"]),
       };
 
       deliveryData = rawData.slice(hRow + 1).filter(r => safeValue(r[col.CONTAINER]) || safeValue(r[col.BL])).map((r) => {
@@ -3935,6 +3936,7 @@ fileUpload?.addEventListener("change", (e) => {
         obj["ENTREGA VAZIO"] = col.EMPTY_DELIVERED >= 0 ? safeValue(r[col.EMPTY_DELIVERED]) : "";
         obj["DATA E HORARIO DE DESCARGA"] = col.UNLOAD_AT_BYD >= 0 ? safeValue(r[col.UNLOAD_AT_BYD]) : "";
         obj["NOTES"] = col.NOTES >= 0 ? safeValue(r[col.NOTES]) : "";
+        obj["PARETO"] = col.PARETO >= 0 ? safeValue(r[col.PARETO]) : "";
         obj["STATUS"] = sanitizeStatus(col.STATUS >= 0 ? safeValue(r[col.STATUS]) : "");
         obj._id = makeRowId(obj);
         return obj;
@@ -4029,7 +4031,7 @@ exportExcelBtn?.addEventListener("click", async () => {
     "DATA E HORARIO DE DESCARGA", 
     "ENTREGA VAZIO", 
     "TIME OF OPERATION",
-    "LOAD TIME", "DEPOT SCA", "SALVADOR", "PO SAP", "NF", "EMISSÃO NF", "NOTES"
+    "LOAD TIME", "DEPOT SCA", "SALVADOR", "PO SAP", "NF", "EMISSÃO NF", "NOTES", "PARETO"
   ];
 
   // Create Title Row
@@ -4764,12 +4766,12 @@ function showParetoDrillDownModal(reason: string, matrixCarrierList: string[], o
   });
 }
 
-function renderParetoConfigModal() {
+function renderParetoConfigModal(currentReasons?: string[]) {
   const container = document.createElement("div");
   container.className = "fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 transition-opacity";
   container.id = "pareto-config-modal-container";
   
-  const reasons = (window as any).__PARETO_REASONS__ || [
+  const reasons = currentReasons ? [...currentReasons] : [...((window as any).__PARETO_REASONS__ || [
     "PRAZO CURTO PARA COLETA",
     "QUEBRA DE VEÍCULO",
     "INCIDENTE TERMINAL",
@@ -4779,7 +4781,7 @@ function renderParetoConfigModal() {
     "ACIDENTE NA RODOVIA",
     "FILA NO TERMINAL",
     "PENDÊNCIA DOCUMENTAL"
-  ];
+  ])];
 
   container.innerHTML = `
     <div class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
@@ -4829,8 +4831,8 @@ function renderParetoConfigModal() {
     const val = input.value.trim().toUpperCase();
     if (val && !reasons.includes(val)) {
       reasons.unshift(val); // add to top
-      renderParetoConfigModal(); // re-render
       close();
+      renderParetoConfigModal(reasons); // re-render with updated reasons
     }
   });
 
@@ -4843,8 +4845,8 @@ function renderParetoConfigModal() {
       const idx = parseInt((e.currentTarget as HTMLElement).dataset.index || "-1", 10);
       if (idx >= 0) {
         reasons.splice(idx, 1);
-        renderParetoConfigModal(); // re-render
         close();
+        renderParetoConfigModal(reasons); // re-render with updated reasons
       }
     });
   });
