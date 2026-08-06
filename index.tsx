@@ -681,18 +681,52 @@ type FirebaseState = {
   companyLogo?: string;
   dailyCarrierNotes?: Record<string, Record<string, { motivo: string, impacto: string }>>;
   paretoReasons?: string[];
+  historyLastUpdate?: number;
 };
 
 const FIREBASE_COLLECTION = "delivery_dashboard";
 const FIREBASE_DOC = "live_data";
 
+let loadedHistoryLastUpdate: any = null;
+let isFirstHistoryLoad = true;
+
 async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
   if (!db || isUpdatingFromFirebase) return;
 
   try {
-    const stateToSave: FirebaseState = {
+    // 1. Separate logo data to save in its own document (prevents bloating active state)
+    const logoStr = patch.companyLogo || localStorage.getItem("companyLogo") || "";
+    if (logoStr) {
+      await db.collection(FIREBASE_COLLECTION).doc("logo_data").set({ companyLogo: logoStr });
+    }
+
+    // 2. Separate historical data into small chunks of 250 rows each
+    const finalHistoricalData = patch.hasOwnProperty("historicalData") ? patch.historicalData || [] : historicalData;
+    const chunkCount = Math.ceil(finalHistoricalData.length / 250);
+    
+    const chunkPromises = [];
+    for (let i = 0; i < chunkCount; i++) {
+      const chunkRows = finalHistoricalData.slice(i * 250, (i + 1) * 250);
+      chunkPromises.push(
+        db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).set({ rows: chunkRows })
+      );
+    }
+    
+    // Clean up any extra/dangling chunks that might have existed previously
+    const deletePromises = [];
+    for (let i = chunkCount; i < chunkCount + 10; i++) {
+      deletePromises.push(
+        db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).delete().catch(() => {})
+      );
+    }
+
+    await Promise.all(chunkPromises);
+    await Promise.all(deletePromises);
+    await db.collection(FIREBASE_COLLECTION).doc("history_metadata").set({ chunkCount });
+
+    // 3. Save active live_data (clean of logo and raw historicalData)
+    const liveDataToSave: any = {
       deliveryData,
-      historicalData,
       dailyCarrierNotes,
       paretoReasons: (window as any).__PARETO_REASONS__ || [
         "PRAZO CURTO PARA COLETA",
@@ -707,11 +741,15 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
       ],
       lastUpdate: new Date(),
       lastUpdateSheetName: lastUpdate?.dataset?.sheetName || "",
-      companyLogo: localStorage.getItem("companyLogo") || "",
+      historyLastUpdate: new Date().getTime(), // trigger other clients to reload chunked history
       ...patch,
     };
 
-    await db.collection(FIREBASE_COLLECTION).doc(FIREBASE_DOC).set(stateToSave, { merge: true });
+    // Strip huge keys to stay safe under 1MB limit
+    delete liveDataToSave.historicalData;
+    delete liveDataToSave.companyLogo;
+
+    await db.collection(FIREBASE_COLLECTION).doc(FIREBASE_DOC).set(liveDataToSave, { merge: true });
   } catch (error) {
     console.error("Error saving state to Firebase:", error);
   }
@@ -719,25 +757,36 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
 
 function listenForRealtimeUpdates() {
   if (!db) return;
+
+  // 1. Fetch custom logo once from logo_data on startup
+  db.collection(FIREBASE_COLLECTION)
+    .doc("logo_data")
+    .get()
+    .then((docSnap: any) => {
+      if (docSnap.exists) {
+        const logoData = docSnap.data();
+        if (logoData && logoData.companyLogo) {
+          localStorage.setItem("companyLogo", logoData.companyLogo);
+          companyLogo.src = logoData.companyLogo;
+          logoContainer.classList.toggle("hidden", !logoData.companyLogo);
+        }
+      }
+    })
+    .catch((err: any) => console.error("Error loading logo from Firebase:", err));
+
+  // 2. Listen for active live data in real-time
   db.collection(FIREBASE_COLLECTION)
     .doc(FIREBASE_DOC)
     .onSnapshot(
-      (docSnap: any) => {
+      async (docSnap: any) => {
         isUpdatingFromFirebase = true;
         if (docSnap.exists) {
-          const data: FirebaseState = docSnap.data() || {};
+          const data: any = docSnap.data() || {};
           deliveryData = Array.isArray(data.deliveryData) ? data.deliveryData : [];
-          historicalData = Array.isArray(data.historicalData) ? data.historicalData : [];
           dailyCarrierNotes = data.dailyCarrierNotes || {};
           
           if (Array.isArray(data.paretoReasons)) {
             (window as any).__PARETO_REASONS__ = data.paretoReasons;
-          }
-
-          if (data.companyLogo && typeof data.companyLogo === "string") {
-            localStorage.setItem("companyLogo", data.companyLogo);
-            companyLogo.src = data.companyLogo;
-            logoContainer.classList.toggle("hidden", !data.companyLogo);
           }
 
           const lastUpdateDate = data.lastUpdate?.toDate ? data.lastUpdate.toDate() : null;
@@ -747,7 +796,48 @@ function listenForRealtimeUpdates() {
             lastUpdate.textContent = t("lastUpdateText", sheetName, lastUpdateDate.toLocaleString(currentLanguage, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
           }
 
-          if (deliveryData.length > 0) applyFiltersAndRender();
+          // 3. Dynamically fetch history chunks when the remote history state changes
+          const remoteHistoryLastUpdate = data.historyLastUpdate || null;
+          if (isFirstHistoryLoad || remoteHistoryLastUpdate !== loadedHistoryLastUpdate) {
+            loadedHistoryLastUpdate = remoteHistoryLastUpdate;
+            isFirstHistoryLoad = false;
+
+            try {
+              const metaSnap = await db.collection(FIREBASE_COLLECTION).doc("history_metadata").get();
+              if (metaSnap.exists) {
+                const meta = metaSnap.data();
+                const chunkCount = meta.chunkCount || 0;
+
+                const chunkPromises = [];
+                for (let i = 0; i < chunkCount; i++) {
+                  chunkPromises.push(db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).get());
+                }
+                const chunkSnaps = await Promise.all(chunkPromises);
+
+                let loadedRows: any[] = [];
+                chunkSnaps.forEach((snap: any) => {
+                  if (snap.exists) {
+                    const chunkData = snap.data();
+                    if (Array.isArray(chunkData.rows)) {
+                      loadedRows = loadedRows.concat(chunkData.rows);
+                    }
+                  }
+                });
+
+                historicalData = loadedRows;
+              } else if (Array.isArray(data.historicalData)) {
+                // Fallback for backward compatibility
+                historicalData = data.historicalData;
+              }
+            } catch (err) {
+              console.error("Error loading historical chunks:", err);
+              if (Array.isArray(data.historicalData)) {
+                historicalData = data.historicalData;
+              }
+            }
+          }
+
+          if (deliveryData.length > 0 || historicalData.length > 0) applyFiltersAndRender();
           else resetUI();
         }
         setTimeout(() => {
