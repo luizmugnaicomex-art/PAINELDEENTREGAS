@@ -747,13 +747,15 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
 
     if (patch.hasOwnProperty("historicalData")) {
       liveDataToSave.historyLastUpdate = new Date().getTime(); // trigger other clients to reload chunked history
+    } else if (loadedHistoryLastUpdate) {
+      liveDataToSave.historyLastUpdate = loadedHistoryLastUpdate;
     }
 
     // Strip huge keys to stay safe under 1MB limit
     delete liveDataToSave.historicalData;
     delete liveDataToSave.companyLogo;
 
-    await db.collection(FIREBASE_COLLECTION).doc(FIREBASE_DOC).set(liveDataToSave, { merge: true });
+    await db.collection(FIREBASE_COLLECTION).doc(FIREBASE_DOC).set(liveDataToSave);
   } catch (error) {
     console.error("Error saving state to Firebase:", error);
   }
