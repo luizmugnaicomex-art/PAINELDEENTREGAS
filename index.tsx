@@ -694,35 +694,36 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
   if (!db || isUpdatingFromFirebase) return;
 
   try {
-    // 1. Separate logo data to save in its own document (prevents bloating active state)
-    const logoStr = patch.companyLogo || localStorage.getItem("companyLogo") || "";
-    if (logoStr) {
-      await db.collection(FIREBASE_COLLECTION).doc("logo_data").set({ companyLogo: logoStr });
+    // 1. Separate logo data to save in its own document ONLY when explicitly updated (prevents redundant writes)
+    if (patch.companyLogo) {
+      await db.collection(FIREBASE_COLLECTION).doc("logo_data").set({ companyLogo: patch.companyLogo });
     }
 
-    // 2. Separate historical data into small chunks of 250 rows each
-    const finalHistoricalData = patch.hasOwnProperty("historicalData") ? patch.historicalData || [] : historicalData;
-    const chunkCount = Math.ceil(finalHistoricalData.length / 250);
-    
-    const chunkPromises = [];
-    for (let i = 0; i < chunkCount; i++) {
-      const chunkRows = finalHistoricalData.slice(i * 250, (i + 1) * 250);
-      chunkPromises.push(
-        db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).set({ rows: chunkRows })
-      );
-    }
-    
-    // Clean up any extra/dangling chunks that might have existed previously
-    const deletePromises = [];
-    for (let i = chunkCount; i < chunkCount + 10; i++) {
-      deletePromises.push(
-        db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).delete().catch(() => {})
-      );
-    }
+    // 2. Separate historical data into small chunks of 250 rows each ONLY if historicalData is explicitly modified
+    if (patch.hasOwnProperty("historicalData")) {
+      const finalHistoricalData = patch.historicalData || [];
+      const chunkCount = Math.ceil(finalHistoricalData.length / 250);
+      
+      const chunkPromises = [];
+      for (let i = 0; i < chunkCount; i++) {
+        const chunkRows = finalHistoricalData.slice(i * 250, (i + 1) * 250);
+        chunkPromises.push(
+          db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).set({ rows: chunkRows })
+        );
+      }
+      
+      // Clean up any extra/dangling chunks that might have existed previously
+      const deletePromises = [];
+      for (let i = chunkCount; i < chunkCount + 10; i++) {
+        deletePromises.push(
+          db.collection(FIREBASE_COLLECTION).doc(`history_chunk_${i}`).delete().catch(() => {})
+        );
+      }
 
-    await Promise.all(chunkPromises);
-    await Promise.all(deletePromises);
-    await db.collection(FIREBASE_COLLECTION).doc("history_metadata").set({ chunkCount });
+      await Promise.all(chunkPromises);
+      await Promise.all(deletePromises);
+      await db.collection(FIREBASE_COLLECTION).doc("history_metadata").set({ chunkCount });
+    }
 
     // 3. Save active live_data (clean of logo and raw historicalData)
     const liveDataToSave: any = {
@@ -741,9 +742,12 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
       ],
       lastUpdate: new Date(),
       lastUpdateSheetName: lastUpdate?.dataset?.sheetName || "",
-      historyLastUpdate: new Date().getTime(), // trigger other clients to reload chunked history
       ...patch,
     };
+
+    if (patch.hasOwnProperty("historicalData")) {
+      liveDataToSave.historyLastUpdate = new Date().getTime(); // trigger other clients to reload chunked history
+    }
 
     // Strip huge keys to stay safe under 1MB limit
     delete liveDataToSave.historicalData;
@@ -2951,7 +2955,7 @@ function renderHistoryTab() {
         if (dailyCarrierNotes[selectedHistoryDate!]) {
           delete dailyCarrierNotes[selectedHistoryDate!];
         }
-        saveStateToFirebase();
+        saveStateToFirebase({ historicalData });
         selectedHistoryDate = null;
         renderHistoryTab();
         showToast("Data excluída com sucesso.", "success");
@@ -4299,7 +4303,7 @@ saveDayBtn?.addEventListener("click", async () => {
     
     deliveryData = [];
     
-    await saveStateToFirebase();
+    await saveStateToFirebase({ historicalData });
     showToast("Dia salvo e arquivado com sucesso!", "success");
     applyFiltersAndRender();
     if (deliveryData.length === 0) resetUI();
