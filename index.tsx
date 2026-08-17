@@ -2799,7 +2799,14 @@ function renderHistoryTab() {
                       <td class="py-2 border-b border-r dark:border-slate-700 font-bold">${c}</td>
                       <td class="py-2 border-b border-r dark:border-slate-700">${data.programados}</td>
                       <td class="py-2 border-b border-r dark:border-slate-700">${data.entregues}</td>
-                      <td class="py-2 border-b border-r dark:border-slate-700">${data.backlog}</td>
+                      <td class="py-2 border-b border-r dark:border-slate-700">
+                        ${data.backlog > 0 ? `
+                          <button type="button" class="backlog-count-btn inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-xs bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 transition-all cursor-pointer shadow-xs group" data-carrier="${c}" data-date="${selectedHistoryDate}" title="Clique para ver os ${data.backlog} containers em backlog da ${c}">
+                            <span>${data.backlog}</span>
+                            <i class="fas fa-boxes text-[10px] text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform"></i>
+                          </button>
+                        ` : `0`}
+                      </td>
                       <td class="py-2 border-b dark:border-slate-700">${perf}</td>
                     </tr>
                   `;
@@ -2808,7 +2815,14 @@ function renderHistoryTab() {
                   <td class="py-2 border-t dark:border-slate-700 border-r">TOTAL</td>
                   <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.programados}</td>
                   <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.entregues}</td>
-                  <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.backlog}</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r">
+                    ${dailyTotal.backlog > 0 ? `
+                      <button type="button" class="backlog-count-btn inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full font-bold text-xs bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 transition-all cursor-pointer shadow-xs group" data-carrier="ALL" data-date="${selectedHistoryDate}" title="Clique para ver todos os ${dailyTotal.backlog} containers em backlog do dia">
+                        <span>${dailyTotal.backlog}</span>
+                        <i class="fas fa-boxes text-[10px] group-hover:scale-110 transition-transform"></i>
+                      </button>
+                    ` : `0`}
+                  </td>
                   <td class="py-2 border-t dark:border-slate-700">${dailyTotal.programados > 0 ? ((dailyTotal.entregues / dailyTotal.programados) * 100).toFixed(1) + "%" : "0.0%"}</td>
                 </tr>
               </tbody>
@@ -2847,7 +2861,12 @@ function renderHistoryTab() {
                   return `
                     <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                       <td class="py-2 border-b border-r dark:border-slate-700 font-bold">${c}</td>
-                      <td class="py-2 border-b border-r dark:border-slate-700">${data.backlog}</td>
+                      <td class="py-2 border-b border-r dark:border-slate-700">
+                        <button type="button" class="backlog-count-btn inline-flex items-center justify-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold text-xs bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 transition-all cursor-pointer shadow-xs group" data-carrier="${c}" data-date="${selectedHistoryDate}" title="Clique para ver os ${data.backlog} containers em backlog da ${c}">
+                          <span>${data.backlog}</span>
+                          <i class="fas fa-boxes text-[10px] text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform"></i>
+                        </button>
+                      </td>
                       <td class="py-1 px-2 border-b border-r dark:border-slate-700 text-left">
                         <input type="text" class="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:outline-none transition-colors history-note-input px-1 py-0.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 dark:placeholder:text-slate-500" data-date="${selectedHistoryDate}" data-carrier="${c}" data-field="motivo" placeholder="${autoMotivos}" value="${savedNotes.motivo}">
                       </td>
@@ -2859,7 +2878,14 @@ function renderHistoryTab() {
                 }).join("")}
                 <tr class="bg-slate-100 dark:bg-slate-900 font-bold text-slate-800 dark:text-slate-200">
                   <td class="py-2 border-t dark:border-slate-700 border-r">TOTAL</td>
-                  <td class="py-2 border-t dark:border-slate-700 border-r">${dailyTotal.backlog}</td>
+                  <td class="py-2 border-t dark:border-slate-700 border-r">
+                    ${dailyTotal.backlog > 0 ? `
+                      <button type="button" class="backlog-count-btn inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full font-bold text-xs bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 transition-all cursor-pointer shadow-xs group" data-carrier="ALL" data-date="${selectedHistoryDate}" title="Clique para ver todos os ${dailyTotal.backlog} containers em backlog do dia">
+                        <span>${dailyTotal.backlog}</span>
+                        <i class="fas fa-boxes text-[10px] group-hover:scale-110 transition-transform"></i>
+                      </button>
+                    ` : `0`}
+                  </td>
                   <td class="py-2 border-t dark:border-slate-700 border-r"></td>
                   <td class="py-2 border-t dark:border-slate-700"></td>
                 </tr>
@@ -2891,7 +2917,14 @@ function renderHistoryTab() {
                           <td class="py-1 border-b border-r dark:border-slate-700 font-bold">${c}</td>
                           <td class="py-1 border-b border-r dark:border-slate-700">${data.programados}</td>
                           <td class="py-1 border-b border-r dark:border-slate-700">${data.entregues}</td>
-                          <td class="py-1 border-b border-r dark:border-slate-700">${data.backlog}</td>
+                          <td class="py-1 border-b border-r dark:border-slate-700">
+                            ${data.backlog > 0 ? `
+                              <button type="button" class="weekly-backlog-count-btn inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-xs bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 transition-all cursor-pointer shadow-xs group" data-carrier="${c}" title="Clique para ver os ${data.backlog} containers em backlog da semana da ${c}">
+                                <span>${data.backlog}</span>
+                                <i class="fas fa-boxes text-[10px] text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform"></i>
+                              </button>
+                            ` : `0`}
+                          </td>
                           <td class="py-1 border-b dark:border-slate-700">${perf}</td>
                         </tr>
                       `;
@@ -2900,7 +2933,14 @@ function renderHistoryTab() {
                       <td class="py-2 border-t dark:border-slate-700 border-r">TOTAL</td>
                       <td class="py-2 border-t dark:border-slate-700 border-r">${weeklyTotal.programados}</td>
                       <td class="py-2 border-t dark:border-slate-700 border-r">${weeklyTotal.entregues}</td>
-                      <td class="py-2 border-t dark:border-slate-700 border-r">${weeklyTotal.backlog}</td>
+                      <td class="py-2 border-t dark:border-slate-700 border-r">
+                        ${weeklyTotal.backlog > 0 ? `
+                          <button type="button" class="weekly-backlog-count-btn inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full font-bold text-xs bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 transition-all cursor-pointer shadow-xs group" data-carrier="ALL" title="Clique para ver todos os ${weeklyTotal.backlog} containers em backlog da semana">
+                            <span>${weeklyTotal.backlog}</span>
+                            <i class="fas fa-boxes text-[10px] group-hover:scale-110 transition-transform"></i>
+                          </button>
+                        ` : `0`}
+                      </td>
                       <td class="py-2 border-t dark:border-slate-700">${weeklyTotal.programados > 0 ? ((weeklyTotal.entregues / weeklyTotal.programados) * 100).toFixed(1) + "%" : "0.0%"}</td>
                     </tr>
                  </tbody>
@@ -3053,6 +3093,43 @@ function renderHistoryTab() {
     btn.addEventListener("click", (e) => {
       selectedHistoryDate = (e.currentTarget as HTMLElement).dataset.date || null;
       renderHistoryTab();
+    });
+  });
+
+  // Backlog quantity click listeners - Daily
+  document.querySelectorAll(".backlog-count-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const carrier = (e.currentTarget as HTMLElement).dataset.carrier || "ALL";
+      const date = (e.currentTarget as HTMLElement).dataset.date || selectedHistoryDate || "";
+      
+      const isBacklog = (row: any) => normalizeText(row["STATUS"] || "") !== "ENTREGUE";
+      let backlogRows: any[] = [];
+      if (carrier === "ALL") {
+        backlogRows = dailyItems.filter(isBacklog);
+      } else {
+        backlogRows = dailyItems.filter(r => String(r["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase() === carrier && isBacklog(r));
+      }
+      
+      showBacklogContainersModal(date, carrier, backlogRows, false);
+    });
+  });
+
+  // Backlog quantity click listeners - Weekly
+  document.querySelectorAll(".weekly-backlog-count-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const carrier = (e.currentTarget as HTMLElement).dataset.carrier || "ALL";
+      
+      const isBacklog = (row: any) => normalizeText(row["STATUS"] || "") !== "ENTREGUE";
+      let backlogRows: any[] = [];
+      if (carrier === "ALL") {
+        backlogRows = weeklyItems.filter(isBacklog);
+      } else {
+        backlogRows = weeklyItems.filter(r => String(r["TRANSPORTATION COMPANY"] || "N/A").trim().toUpperCase() === carrier && isBacklog(r));
+      }
+      
+      showBacklogContainersModal(selectedHistoryWeek || "", carrier, backlogRows, true);
     });
   });
 
@@ -4797,6 +4874,254 @@ function renderParetoTab() {
   document.getElementById("pareto-chart-mode-carrier")?.addEventListener("click", () => {
     paretoChartMode = "carrier";
     renderParetoTab();
+  });
+}
+
+function showBacklogContainersModal(dateKey: string, carrier: string, rows: any[], isWeekly: boolean = false) {
+  // Remove existing modal if any
+  const existingModal = document.getElementById("backlog-containers-modal");
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "backlog-containers-modal";
+  modal.className = "fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-3 md:p-6 transition-all duration-300 animate-in fade-in";
+
+  const isAll = carrier === "ALL";
+  const carrierTitle = isAll ? "Todas as Transportadoras" : carrier;
+  const dateFormatted = isWeekly 
+    ? `Semana: ${dateKey}` 
+    : (dateKey === t("undefinedDate") ? dateKey : (dateKey || "").split("-").reverse().join("/"));
+
+  let filteredRows = [...rows];
+
+  const renderContent = (list: any[], searchTerm: string = "") => {
+    if (list.length === 0) {
+      return `
+        <tr>
+          <td colspan="7" class="py-12 text-center text-slate-500 dark:text-slate-400">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <i class="fas fa-search text-3xl text-slate-300 dark:text-slate-600"></i>
+              <p class="text-sm font-medium">${searchTerm ? 'Nenhum contêiner encontrado para a busca realizada.' : 'Nenhum contêiner em backlog nesta seleção.'}</p>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    return list.map((row: any, idx: number) => {
+      const containerNum = String(row["CONTAINER"] || "-").trim();
+      const status = row["STATUS"] || "PENDENTE";
+      const carrierName = String(row["TRANSPORTATION COMPANY"] || "-").trim();
+      const lot = String(row["LOT"] || "").trim();
+      const model = String(row["MODEL"] || "").trim();
+      const bl = String(row["BL"] || "").trim();
+      const pareto = String(row["PARETO"] || "").trim();
+      const notes = String(row["NOTES"] || "").trim();
+      const driver = String(row["DRIVER NAME"] || "").trim();
+      const plate = String(row["LICENSE P (Plate 1)"] || "").trim();
+      const scope = String(row["OPERATION SCOPE"] || "").trim();
+      const warehouse = String(row["BONDED WAREHOUSE"] || "").trim();
+
+      const lotModelBl = [lot, model, bl].filter(Boolean).join(" • ") || "-";
+      const driverPlate = [driver, plate].filter(Boolean).join(" - ") || "-";
+
+      return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+          <td class="px-3 py-2.5 text-center text-xs text-slate-400 dark:text-slate-500 font-mono">${idx + 1}</td>
+          <td class="px-3 py-2.5 font-mono font-bold text-xs text-blue-600 dark:text-blue-400">
+            <span class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded border border-blue-100 dark:border-blue-800">
+              <i class="fas fa-box text-blue-500 dark:text-blue-400 text-[11px]"></i>
+              <span>${containerNum}</span>
+            </span>
+          </td>
+          <td class="px-3 py-2.5 text-center text-xs whitespace-nowrap">
+            ${getStatusPill(status)}
+          </td>
+          <td class="px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+            ${carrierName}
+          </td>
+          <td class="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300">
+            <div class="font-semibold text-slate-800 dark:text-slate-200">${lotModelBl}</div>
+            ${scope ? `<div class="text-[10px] text-slate-400 dark:text-slate-500">${scope}</div>` : ""}
+          </td>
+          <td class="px-3 py-2.5 text-xs">
+            ${pareto ? `
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 mr-1 mb-0.5 border border-amber-200 dark:border-amber-800">
+                <i class="fas fa-exclamation-triangle mr-1 text-[9px] text-amber-600 dark:text-amber-400"></i>${pareto}
+              </span>
+            ` : ""}
+            ${notes ? `
+              <div class="text-[11px] text-slate-700 dark:text-slate-300 font-medium italic mt-0.5"><i class="fas fa-comment-dots text-slate-400 mr-1 text-[10px]"></i>${notes}</div>
+            ` : (!pareto ? `<span class="text-slate-400">-</span>` : "")}
+          </td>
+          <td class="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
+            <div class="font-medium text-slate-700 dark:text-slate-300">${driverPlate}</div>
+            ${warehouse ? `<div class="text-[10px] text-slate-400"><i class="fas fa-warehouse mr-1 text-[9px]"></i>${warehouse}</div>` : ""}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  };
+
+  // Group status counts for quick chips
+  const statusCounts: Record<string, number> = {};
+  rows.forEach(r => {
+    const s = r["STATUS"] || "PENDENTE";
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  });
+
+  modal.innerHTML = `
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0 text-lg shadow-xs">
+            <i class="fas fa-boxes"></i>
+          </div>
+          <div>
+            <h2 class="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              Backlog: <span class="text-blue-600 dark:text-blue-400">${carrierTitle}</span>
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+              <span><i class="far fa-calendar-alt mr-1 text-slate-400"></i>${dateFormatted}</span>
+              <span>•</span>
+              <span class="font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">${rows.length} contêiner(es) em backlog</span>
+            </p>
+          </div>
+        </div>
+        <button id="close-backlog-modal-x" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer text-xl leading-none" title="Fechar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <!-- Action & Search Bar -->
+      <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="relative flex-1 max-w-md">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+          <input 
+            type="text" 
+            id="backlog-modal-search" 
+            placeholder="Buscar por contêiner, lote, BL, motorista, motivo..." 
+            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 text-xs rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all placeholder:text-slate-400"
+          />
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span id="backlog-modal-counter" class="text-xs text-slate-500 dark:text-slate-400 font-medium px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg">
+            Exibindo <strong>${rows.length}</strong> de ${rows.length}
+          </span>
+          <button id="copy-backlog-containers-btn" class="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border border-blue-200 dark:border-blue-800 shadow-xs">
+            <i class="fas fa-copy"></i>
+            <span>Copiar Contêineres</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Status Filter Pills -->
+      ${Object.keys(statusCounts).length > 1 ? `
+        <div class="px-4 py-2 bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2 overflow-x-auto text-[11px] custom-scrollbar">
+          <span class="text-slate-500 dark:text-slate-400 font-semibold uppercase text-[10px]">Status:</span>
+          ${Object.entries(statusCounts).map(([st, cnt]) => `
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-medium shadow-xs">
+              ${st}: <strong class="text-slate-900 dark:text-white font-bold">${cnt}</strong>
+            </span>
+          `).join("")}
+        </div>
+      ` : ""}
+
+      <!-- Table Container -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-0">
+        <table class="w-full text-left border-collapse">
+          <thead class="bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 sticky top-0 z-10 text-[11px] uppercase tracking-wider font-bold border-b border-slate-200 dark:border-slate-700 shadow-xs">
+            <tr>
+              <th class="px-3 py-2.5 text-center w-12 bg-slate-100 dark:bg-slate-900">#</th>
+              <th class="px-3 py-2.5 bg-slate-100 dark:bg-slate-900">Container</th>
+              <th class="px-3 py-2.5 text-center bg-slate-100 dark:bg-slate-900">Status</th>
+              <th class="px-3 py-2.5 bg-slate-100 dark:bg-slate-900">Transportadora</th>
+              <th class="px-3 py-2.5 bg-slate-100 dark:bg-slate-900">Lote / Modelo / BL</th>
+              <th class="px-3 py-2.5 bg-slate-100 dark:bg-slate-900">Motivo / Pareto / Observações</th>
+              <th class="px-3 py-2.5 bg-slate-100 dark:bg-slate-900">Motorista / Placa</th>
+            </tr>
+          </thead>
+          <tbody id="backlog-modal-tbody" class="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs">
+            ${renderContent(filteredRows)}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between">
+        <div class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+          <i class="fas fa-info-circle text-blue-500"></i>
+          <span>Contêineres com status diferente de "ENTREGUE" na data/período selecionado.</span>
+        </div>
+        <button id="close-backlog-modal-btn" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg transition-colors cursor-pointer">
+          Fechar
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeModal = () => {
+    document.removeEventListener("keydown", onKeyDown);
+    modal.remove();
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") closeModal();
+  };
+  document.addEventListener("keydown", onKeyDown);
+
+  document.getElementById("close-backlog-modal-x")?.addEventListener("click", closeModal);
+  document.getElementById("close-backlog-modal-btn")?.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  const searchInput = document.getElementById("backlog-modal-search") as HTMLInputElement;
+  const tbody = document.getElementById("backlog-modal-tbody");
+  const counterEl = document.getElementById("backlog-modal-counter");
+
+  if (searchInput && tbody && counterEl) {
+    searchInput.addEventListener("input", (e) => {
+      const term = normalizeText((e.target as HTMLInputElement).value);
+      if (!term) {
+        filteredRows = [...rows];
+      } else {
+        filteredRows = rows.filter((row: any) => {
+          const container = normalizeText(row["CONTAINER"]);
+          const bl = normalizeText(row["BL"]);
+          const lot = normalizeText(row["LOT"]);
+          const model = normalizeText(row["MODEL"]);
+          const carrierName = normalizeText(row["TRANSPORTATION COMPANY"]);
+          const st = normalizeText(row["STATUS"]);
+          const pareto = normalizeText(row["PARETO"]);
+          const notes = normalizeText(row["NOTES"]);
+          const driver = normalizeText(row["DRIVER NAME"]);
+          const plate = normalizeText(row["LICENSE P (Plate 1)"]);
+          return container.includes(term) || bl.includes(term) || lot.includes(term) || model.includes(term) || carrierName.includes(term) || st.includes(term) || pareto.includes(term) || notes.includes(term) || driver.includes(term) || plate.includes(term);
+        });
+      }
+
+      tbody.innerHTML = renderContent(filteredRows, (e.target as HTMLInputElement).value);
+      counterEl.innerHTML = `Exibindo <strong>${filteredRows.length}</strong> de ${rows.length}`;
+    });
+  }
+
+  // Copy button
+  document.getElementById("copy-backlog-containers-btn")?.addEventListener("click", () => {
+    const containers = filteredRows.map(r => String(r["CONTAINER"] || "").trim()).filter(Boolean);
+    if (containers.length === 0) {
+      showToast("Nenhum contêiner para copiar", "warning");
+      return;
+    }
+    const textToCopy = containers.join("\n");
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      showToast(`${containers.length} contêiner(es) copiados para a área de transferência!`, "success");
+    }).catch(() => {
+      showToast("Erro ao copiar contêineres", "error");
+    });
   });
 }
 
