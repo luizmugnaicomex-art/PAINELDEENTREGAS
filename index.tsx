@@ -212,6 +212,7 @@ const translations = {
     saveDayButton: "Fechar e Salvar Dia",
     historyTab: "Histórico Mensal",
     paretoTab: "Análise de Fenômeno - Paretos",
+    swotTab: "SWOT",
     saveDayConfirmTitle: "Arquivar o dia atual?",
     saveDayConfirmMsg: "Isso salvará a programação atual no histórico mensal e limpará o painel para a nova planilha do dia seguinte. Continuar?"
   },
@@ -339,6 +340,7 @@ const translations = {
     saveDayButton: "Save End of Day",
     historyTab: "Monthly History",
     paretoTab: "Phenomenon Analysis - Pareto",
+    swotTab: "SWOT",
     saveDayConfirmTitle: "Archive Current Day?",
     saveDayConfirmMsg: "This will save the current schedule to the monthly history and clear the dashboard for the new day's upload. Continue?"
   },
@@ -466,6 +468,7 @@ const translations = {
     saveDayButton: "保存当天 (Save Day)",
     historyTab: "历史记录",
     paretoTab: "现象分析 - 帕累托",
+    swotTab: "SWOT 分析",
     saveDayConfirmTitle: "归档当天数据？",
     saveDayConfirmMsg: "这会将当前计划保存到月度历史记录，并清空仪表板以便上传新一天的计划。是否继续？"
   },
@@ -673,6 +676,17 @@ logoUpload?.addEventListener("change", handleLogoUpload);
 let isUpdatingFromFirebase = false;
 
 
+type SwotAnalysisItem = {
+  forces: string;
+  fraquezas: string;
+  oportunidades: string;
+  ameacas: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  complianceStatus?: "draft" | "reviewed" | "approved";
+  complianceNotes?: string;
+};
+
 type FirebaseState = {
   deliveryData?: DeliveryRow[];
   historicalData?: DeliveryRow[];
@@ -682,7 +696,13 @@ type FirebaseState = {
   dailyCarrierNotes?: Record<string, Record<string, { motivo: string, impacto: string }>>;
   paretoReasons?: string[];
   historyLastUpdate?: number;
+  swotData?: Record<string, SwotAnalysisItem>;
 };
+
+let swotData: Record<string, SwotAnalysisItem> = {};
+let swotSelectedMonth: string = "";
+let swotSelectedCarrier: string = "ETP";
+let swotAutoSaveTimer: any = null;
 
 const FIREBASE_COLLECTION = "delivery_dashboard";
 const FIREBASE_DOC = "live_data";
@@ -729,6 +749,7 @@ async function saveStateToFirebase(patch: Partial<FirebaseState> = {}) {
     const liveDataToSave: any = {
       deliveryData,
       dailyCarrierNotes,
+      swotData,
       paretoReasons: (window as any).__PARETO_REASONS__ || [
         "PRAZO CURTO PARA COLETA",
         "QUEBRA DE VEÍCULO",
@@ -793,6 +814,10 @@ function listenForRealtimeUpdates() {
           
           if (Array.isArray(data.paretoReasons)) {
             (window as any).__PARETO_REASONS__ = data.paretoReasons;
+          }
+
+          if (data.swotData && typeof data.swotData === "object") {
+            swotData = data.swotData;
           }
 
           const lastUpdateDate = data.lastUpdate?.toDate ? data.lastUpdate.toDate() : null;
@@ -1247,6 +1272,17 @@ function applyFiltersAndRender(activeTabId: string | null = null) {
   renderDeliveryDashboard(filteredData, activeTabId);
   renderCharts(filteredData);
   renderHistoryTab();
+
+  const isParetoTabActive = document.querySelector(".view-tab-btn[data-tab='pareto']")?.classList.contains("border-blue-500") ?? false;
+  if (isParetoTabActive) {
+    renderParetoTab();
+  }
+
+  const isSwotTabActive = document.querySelector(".view-tab-btn[data-tab='swot']")?.classList.contains("border-blue-500") ?? false;
+  if (isSwotTabActive) {
+    renderSwotTab();
+  }
+
   updateStats();
 }
 
@@ -1882,6 +1918,9 @@ viewModeTabs?.addEventListener("click", (e) => {
     const paretoContent = document.getElementById("pareto-content");
     paretoContent?.classList.toggle("hidden", target !== "pareto");
 
+    const swotContent = document.getElementById("swot-content");
+    swotContent?.classList.toggle("hidden", target !== "swot");
+
     if (target === "charts") {
       renderCharts(deliveryData);
     } else if (target === "time") {
@@ -1890,6 +1929,8 @@ viewModeTabs?.addEventListener("click", (e) => {
       renderHistoryTab();
     } else if (target === "pareto") {
       renderParetoTab();
+    } else if (target === "swot") {
+      renderSwotTab();
     }
 
     updateStats();
@@ -4875,6 +4916,557 @@ function renderParetoTab() {
     paretoChartMode = "carrier";
     renderParetoTab();
   });
+}
+
+/* ------------------------------ SWOT TAB ----------------------------------- */
+function getAvailableSwotCarriers(): string[] {
+  const defaultCarriers = ["ETP", "INTER", "J&W", "TPC", "LOGIC", "BUZIN", "MULTILOG", "CTS", "TEGMA", "RECOM"];
+  const carrierSet = new Set<string>(defaultCarriers);
+
+  [...deliveryData, ...historicalData].forEach((row) => {
+    const c = String(row["TRANSPORTATION COMPANY"] || "").trim().toUpperCase();
+    if (c && c !== "-" && c !== "N/A" && c !== "DESCONHECIDO" && c !== "TODOS" && c !== "EMPTY") {
+      carrierSet.add(c);
+    }
+  });
+
+  Object.keys(swotData).forEach((k) => {
+    const idx = k.indexOf("_");
+    if (idx !== -1) {
+      const c = k.substring(idx + 1).trim();
+      if (c) carrierSet.add(c);
+    }
+  });
+
+  return Array.from(carrierSet);
+}
+
+function getAvailableSwotMonths(): { key: string; label: string }[] {
+  const monthNames = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  const monthMap = new Map<string, string>();
+
+  [...deliveryData, ...historicalData].forEach((r) => {
+    const d = toDateMaybe(r["DELIVERY AT BYD"]);
+    if (d) {
+      const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      monthMap.set(mKey, `${monthNames[d.getMonth()]} / ${d.getFullYear()}`);
+    }
+  });
+
+  const currentYear = new Date().getFullYear();
+  for (let m = 0; m < 12; m++) {
+    const mKey = `${currentYear}-${String(m + 1).padStart(2, "0")}`;
+    if (!monthMap.has(mKey)) {
+      monthMap.set(mKey, `${monthNames[m]} / ${currentYear}`);
+    }
+  }
+
+  Object.keys(swotData).forEach((k) => {
+    const mKey = k.split("_")[0];
+    if (mKey && mKey.includes("-") && !monthMap.has(mKey)) {
+      const [y, m] = mKey.split("-");
+      const mIdx = parseInt(m, 10) - 1;
+      const name = (mIdx >= 0 && mIdx < 12) ? monthNames[mIdx] : mKey;
+      monthMap.set(mKey, `${name} / ${y}`);
+    }
+  });
+
+  return Array.from(monthMap.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, label]) => ({ key, label }));
+}
+
+function hasSwotContent(month: string, carrier: string): boolean {
+  const item = swotData[`${month}_${carrier}`];
+  if (!item) return false;
+  return Boolean(
+    (item.forces && item.forces.trim().length > 0) ||
+    (item.fraquezas && item.fraquezas.trim().length > 0) ||
+    (item.oportunidades && item.oportunidades.trim().length > 0) ||
+    (item.ameacas && item.ameacas.trim().length > 0)
+  );
+}
+
+function renderSwotTab() {
+  const swotContent = document.getElementById("swot-content");
+  if (!swotContent) return;
+
+  const carriers = getAvailableSwotCarriers();
+  const months = getAvailableSwotMonths();
+
+  if (!swotSelectedMonth) {
+    const now = new Date();
+    swotSelectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  if (!swotSelectedCarrier || !carriers.includes(swotSelectedCarrier)) {
+    swotSelectedCarrier = carriers[0] || "ETP";
+  }
+
+  const swotKey = `${swotSelectedMonth}_${swotSelectedCarrier}`;
+  const currentSwot: SwotAnalysisItem = swotData[swotKey] || {
+    forces: "",
+    fraquezas: "",
+    oportunidades: "",
+    ameacas: "",
+    complianceStatus: "draft",
+  };
+
+  const selectedMonthObj = months.find(m => m.key === swotSelectedMonth);
+  const selectedMonthLabel = selectedMonthObj ? selectedMonthObj.label : swotSelectedMonth;
+
+  const countItems = (text: string) => {
+    if (!text || !text.trim()) return 0;
+    return text.split("\n").map(l => l.trim()).filter(l => l.length > 0).length;
+  };
+
+  swotContent.innerHTML = `
+    <!-- Top Filter Bar matching the user design -->
+    <div class="bg-slate-100 dark:bg-slate-800/90 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="bg-blue-600 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1.5 uppercase tracking-wider">
+          <i class="fas fa-filter text-[11px]"></i> FILTROS:
+        </span>
+
+        <div class="relative inline-flex items-center">
+          <select id="swot-month-select" class="appearance-none bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase pl-3 pr-8 py-1.5 rounded-lg shadow-xs border border-blue-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all">
+            ${months.map(m => `<option value="${m.key}" ${m.key === swotSelectedMonth ? 'selected' : ''}>📅 ${m.label}</option>`).join("")}
+          </select>
+          <i class="fas fa-chevron-down absolute right-2.5 text-white/80 pointer-events-none text-[10px]"></i>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5 ml-1" id="swot-carriers-container">
+          ${carriers.map(c => {
+            const isSel = c === swotSelectedCarrier;
+            const hasData = hasSwotContent(swotSelectedMonth, c);
+            return `
+              <button type="button" class="swot-carrier-pill px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer ${
+                isSel
+                  ? 'bg-blue-700 text-white ring-2 ring-blue-300 font-extrabold scale-105 shadow-sm'
+                  : 'bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-500'
+              }" data-carrier="${c}">
+                <span>${c}</span>
+                ${hasData ? `<i class="fas fa-check-circle text-emerald-300 text-[10px] ml-0.5" title="Análise cadastrada"></i>` : ''}
+              </button>
+            `;
+          }).join("")}
+
+          <button type="button" id="swot-add-carrier-btn" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-dashed border-blue-300 dark:border-blue-700 transition-all flex items-center gap-1 cursor-pointer" title="Adicionar transportadora customizada">
+            <i class="fas fa-plus text-[10px]"></i> <span>Nova</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <button type="button" id="swot-clear-btn" class="bg-white dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-300 dark:border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer" title="Limpar análise atual">
+          <i class="fas fa-trash-alt text-[11px]"></i> Limpar Dados
+        </button>
+
+        <button type="button" id="swot-export-pdf-btn" class="bg-red-600 hover:bg-red-700 active:scale-95 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer" title="Exportar relatório em PDF para Auditoria / Compliance">
+          <i class="fas fa-file-pdf text-[12px]"></i> Exportar PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Compliance & Meta Header Bar -->
+    <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm mb-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700/60">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+            <i class="fas fa-clipboard-check"></i>
+          </div>
+          <div>
+            <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              Análise SWOT / FOFA • <span class="text-blue-600 dark:text-blue-400 font-extrabold">${swotSelectedCarrier}</span>
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Matriz estratégica mensal de Forças, Fraquezas, Oportunidades e Ameaças para auditoria de desempenho
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-1.5 text-xs">
+            <span class="font-bold text-slate-600 dark:text-slate-300">Status Compliance:</span>
+            <select id="swot-compliance-status" class="bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
+              <option value="draft" ${currentSwot.complianceStatus === 'draft' ? 'selected' : ''}>🟡 Em Elaboração / Rascunho</option>
+              <option value="reviewed" ${currentSwot.complianceStatus === 'reviewed' ? 'selected' : ''}>🔵 Em Revisão de Compliance</option>
+              <option value="approved" ${currentSwot.complianceStatus === 'approved' ? 'selected' : ''}>🟢 Aprovado para Compliance</option>
+            </select>
+          </div>
+
+          <div id="swot-save-indicator" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
+            <i class="fas fa-check-circle"></i> Sincronizado
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2.5 flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
+        <div class="flex items-center gap-4">
+          <span><strong>Mês de Referência:</strong> ${selectedMonthLabel}</span>
+          <span><strong>Última Alteração:</strong> ${currentSwot.updatedAt ? new Date(currentSwot.updatedAt).toLocaleString("pt-BR") : "Nenhuma alteração registrada"}</span>
+        </div>
+        <div class="text-[11px] italic text-slate-400 dark:text-slate-500">
+          * As alterações são salvas automaticamente no Firebase em tempo real.
+        </div>
+      </div>
+    </div>
+
+    <!-- SWOT Matrix Grid (4 Quadrants) -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+      <!-- Quadrant 1: FORÇAS -->
+      <div class="rounded-xl overflow-hidden border border-emerald-300 dark:border-emerald-900/60 shadow-sm bg-white dark:bg-slate-800 flex flex-col">
+        <div class="bg-[#6aa84f] text-white font-black text-sm md:text-base py-2.5 px-4 flex items-center justify-between shadow-xs">
+          <span class="flex items-center gap-2 tracking-wide uppercase">
+            <i class="fas fa-shield-alt text-emerald-100"></i> FORÇAS
+          </span>
+          <div class="flex items-center gap-2">
+            <span id="forces-counter" class="bg-black/20 text-white text-[11px] font-bold px-2 py-0.5 rounded">
+              ${countItems(currentSwot.forces)} itens
+            </span>
+            <button type="button" class="swot-bullet-btn text-xs font-bold px-2 py-0.5 rounded bg-black/20 hover:bg-black/30 text-white transition-all cursor-pointer" data-target="swot-forces" title="Inserir marcador de tópicos">• Marcador</button>
+          </div>
+        </div>
+        <div class="p-3 bg-[#a4c2f4]/20 dark:bg-slate-900/50 flex-1 flex flex-col min-h-[260px]">
+          <textarea id="swot-forces" class="w-full flex-1 p-3.5 bg-white/95 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-y transition-all placeholder:text-slate-400 font-sans leading-relaxed" placeholder="Descreva os pontos fortes, diferenciais de atendimento, pontualidade, disponibilidade de frota, canais de comunicação rápidos...">${currentSwot.forces || ""}</textarea>
+        </div>
+      </div>
+
+      <!-- Quadrant 2: FRAQUEZAS -->
+      <div class="rounded-xl overflow-hidden border border-rose-300 dark:border-rose-900/60 shadow-sm bg-white dark:bg-slate-800 flex flex-col">
+        <div class="bg-[#e06666] text-white font-black text-sm md:text-base py-2.5 px-4 flex items-center justify-between shadow-xs">
+          <span class="flex items-center gap-2 tracking-wide uppercase">
+            <i class="fas fa-exclamation-triangle text-rose-100"></i> FRAQUEZAS
+          </span>
+          <div class="flex items-center gap-2">
+            <span id="fraquezas-counter" class="bg-black/20 text-white text-[11px] font-bold px-2 py-0.5 rounded">
+              ${countItems(currentSwot.fraquezas)} itens
+            </span>
+            <button type="button" class="swot-bullet-btn text-xs font-bold px-2 py-0.5 rounded bg-black/20 hover:bg-black/30 text-white transition-all cursor-pointer" data-target="swot-fraquezas" title="Inserir marcador de tópicos">• Marcador</button>
+          </div>
+        </div>
+        <div class="p-3 bg-[#a4c2f4]/20 dark:bg-slate-900/50 flex-1 flex flex-col min-h-[260px]">
+          <textarea id="swot-fraquezas" class="w-full flex-1 p-3.5 bg-white/95 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none resize-y transition-all placeholder:text-slate-400 font-sans leading-relaxed" placeholder="Descreva as deficiências operacionais, quebras recorrentes de caminhões, atrasos na coleta do terminal, pendências de documentação fiscal...">${currentSwot.fraquezas || ""}</textarea>
+        </div>
+      </div>
+
+      <!-- Quadrant 3: OPORTUNIDADES -->
+      <div class="rounded-xl overflow-hidden border border-lime-400 dark:border-lime-900/60 shadow-sm bg-white dark:bg-slate-800 flex flex-col">
+        <div class="bg-[#85b347] text-white font-black text-sm md:text-base py-2.5 px-4 flex items-center justify-between shadow-xs">
+          <span class="flex items-center gap-2 tracking-wide uppercase">
+            <i class="fas fa-lightbulb text-lime-100"></i> OPORTUNIDADES
+          </span>
+          <div class="flex items-center gap-2">
+            <span id="oportunidades-counter" class="bg-black/20 text-white text-[11px] font-bold px-2 py-0.5 rounded">
+              ${countItems(currentSwot.oportunidades)} itens
+            </span>
+            <button type="button" class="swot-bullet-btn text-xs font-bold px-2 py-0.5 rounded bg-black/20 hover:bg-black/30 text-white transition-all cursor-pointer" data-target="swot-oportunidades" title="Inserir marcador de tópicos">• Marcador</button>
+          </div>
+        </div>
+        <div class="p-3 bg-[#a4c2f4]/20 dark:bg-slate-900/50 flex-1 flex flex-col min-h-[260px]">
+          <textarea id="swot-oportunidades" class="w-full flex-1 p-3.5 bg-white/95 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-lime-500 focus:outline-none resize-y transition-all placeholder:text-slate-400 font-sans leading-relaxed" placeholder="Oportunidades de melhoria, novas rotas, integração de sistema de telemetria, aumento do volume alocado, janelas de descarregamento dedicadas...">${currentSwot.oportunidades || ""}</textarea>
+        </div>
+      </div>
+
+      <!-- Quadrant 4: AMEAÇAS -->
+      <div class="rounded-xl overflow-hidden border border-rose-300 dark:border-rose-900/60 shadow-sm bg-white dark:bg-slate-800 flex flex-col">
+        <div class="bg-[#e06666] text-white font-black text-sm md:text-base py-2.5 px-4 flex items-center justify-between shadow-xs">
+          <span class="flex items-center gap-2 tracking-wide uppercase">
+            <i class="fas fa-shield-virus text-rose-100"></i> AMEAÇAS
+          </span>
+          <div class="flex items-center gap-2">
+            <span id="ameacas-counter" class="bg-black/20 text-white text-[11px] font-bold px-2 py-0.5 rounded">
+              ${countItems(currentSwot.ameacas)} itens
+            </span>
+            <button type="button" class="swot-bullet-btn text-xs font-bold px-2 py-0.5 rounded bg-black/20 hover:bg-black/30 text-white transition-all cursor-pointer" data-target="swot-ameacas" title="Inserir marcador de tópicos">• Marcador</button>
+          </div>
+        </div>
+        <div class="p-3 bg-[#a4c2f4]/20 dark:bg-slate-900/50 flex-1 flex flex-col min-h-[260px]">
+          <textarea id="swot-ameacas" class="w-full flex-1 p-3.5 bg-white/95 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none resize-y transition-all placeholder:text-slate-400 font-sans leading-relaxed" placeholder="Fatores externos de risco, greve de caminhoneiros, acidentes na rodovia de acesso, filas prolongadas no terminal portuário, oscilações severas de custo de combustível...">${currentSwot.ameacas || ""}</textarea>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach event handlers
+  const forcesEl = document.getElementById("swot-forces") as HTMLTextAreaElement;
+  const fraquezasEl = document.getElementById("swot-fraquezas") as HTMLTextAreaElement;
+  const oportunidadesEl = document.getElementById("swot-oportunidades") as HTMLTextAreaElement;
+  const ameacasEl = document.getElementById("swot-ameacas") as HTMLTextAreaElement;
+  const complianceEl = document.getElementById("swot-compliance-status") as HTMLSelectElement;
+  const indicatorEl = document.getElementById("swot-save-indicator");
+
+  const saveCurrentSwot = (silent: boolean = false) => {
+    if (!forcesEl || !fraquezasEl || !oportunidadesEl || !ameacasEl || !complianceEl) return;
+    const nowIso = new Date().toISOString();
+    swotData[swotKey] = {
+      forces: forcesEl.value,
+      fraquezas: fraquezasEl.value,
+      oportunidades: oportunidadesEl.value,
+      ameacas: ameacasEl.value,
+      complianceStatus: complianceEl.value as any,
+      updatedAt: nowIso,
+    };
+
+    if (indicatorEl && !silent) {
+      indicatorEl.innerHTML = `<i class="fas fa-spinner fa-spin text-amber-500"></i> Salvando...`;
+      indicatorEl.className = "text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-800";
+    }
+
+    if (swotAutoSaveTimer) clearTimeout(swotAutoSaveTimer);
+    swotAutoSaveTimer = setTimeout(async () => {
+      await saveStateToFirebase();
+      if (indicatorEl) {
+        indicatorEl.innerHTML = `<i class="fas fa-check-circle text-emerald-500"></i> Sincronizado`;
+        indicatorEl.className = "text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800";
+      }
+    }, 600);
+  };
+
+  // Textarea input listeners
+  [
+    { el: forcesEl, counter: "forces-counter" },
+    { el: fraquezasEl, counter: "fraquezas-counter" },
+    { el: oportunidadesEl, counter: "oportunidades-counter" },
+    { el: ameacasEl, counter: "ameacas-counter" },
+  ].forEach(({ el, counter }) => {
+    el?.addEventListener("input", () => {
+      const cnt = countItems(el.value);
+      const cEl = document.getElementById(counter);
+      if (cEl) cEl.textContent = `${cnt} itens`;
+      saveCurrentSwot();
+    });
+  });
+
+  complianceEl?.addEventListener("change", () => {
+    saveCurrentSwot();
+  });
+
+  // Bullet point button handlers
+  document.querySelectorAll<HTMLButtonElement>(".swot-bullet-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.target;
+      if (!targetId) return;
+      const targetArea = document.getElementById(targetId) as HTMLTextAreaElement;
+      if (!targetArea) return;
+
+      const val = targetArea.value;
+      const start = targetArea.selectionStart;
+      const end = targetArea.selectionEnd;
+      const bullet = val.length === 0 || val.endsWith("\n") ? "• " : "\n• ";
+      targetArea.value = val.substring(0, start) + bullet + val.substring(end);
+      targetArea.focus();
+      targetArea.selectionStart = targetArea.selectionEnd = start + bullet.length;
+      targetArea.dispatchEvent(new Event("input"));
+    });
+  });
+
+  // Month change
+  document.getElementById("swot-month-select")?.addEventListener("change", (e) => {
+    saveCurrentSwot(true);
+    swotSelectedMonth = (e.target as HTMLSelectElement).value;
+    renderSwotTab();
+  });
+
+  // Carrier pills
+  document.querySelectorAll<HTMLButtonElement>(".swot-carrier-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      saveCurrentSwot(true);
+      const carrier = btn.dataset.carrier;
+      if (carrier) {
+        swotSelectedCarrier = carrier;
+        renderSwotTab();
+      }
+    });
+  });
+
+  // Add custom carrier
+  document.getElementById("swot-add-carrier-btn")?.addEventListener("click", () => {
+    const newCarrier = prompt("Digite o nome ou sigla da nova transportadora:");
+    if (newCarrier && newCarrier.trim()) {
+      const upper = newCarrier.trim().toUpperCase();
+      swotSelectedCarrier = upper;
+      renderSwotTab();
+    }
+  });
+
+  // Clear data button
+  document.getElementById("swot-clear-btn")?.addEventListener("click", () => {
+    showConfirmationDialog(
+      "Limpar Análise SWOT?",
+      `Deseja realmente apagar os registros da matriz SWOT da transportadora ${swotSelectedCarrier} para o mês ${selectedMonthLabel}?`,
+      async () => {
+        delete swotData[swotKey];
+        await saveStateToFirebase();
+        showToast(`Análise de ${swotSelectedCarrier} limpa com sucesso`, "success");
+        renderSwotTab();
+      }
+    );
+  });
+
+  // Export PDF button
+  document.getElementById("swot-export-pdf-btn")?.addEventListener("click", () => {
+    saveCurrentSwot(true);
+    exportSwotPdf(swotSelectedCarrier, swotSelectedMonth, selectedMonthLabel, currentSwot);
+  });
+}
+
+function exportSwotPdf(
+  carrier: string,
+  monthKey: string,
+  monthLabel: string,
+  swotItem: SwotAnalysisItem
+) {
+  const { jsPDF } = (window as any).jspdf || {};
+  if (!jsPDF) {
+    showToast("Biblioteca jsPDF não carregada no navegador.", "error");
+    return;
+  }
+
+  try {
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageWidth = 297;
+    const pageHeight = 210;
+
+    // Header background bar
+    doc.setFillColor(30, 41, 59); // dark slate
+    doc.rect(0, 0, pageWidth, 26, "F");
+
+    // Company logo if available
+    let textLeftMargin = 14;
+    const storedLogo = localStorage.getItem("companyLogo");
+    if (storedLogo) {
+      try {
+        doc.addImage(storedLogo, "PNG", 14, 4, 18, 18);
+        textLeftMargin = 36;
+      } catch (err) {
+        // Continue if logo fails
+      }
+    }
+
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("PAINEL DE ENTREGAS KD • ANÁLISE SWOT / FOFA", textLeftMargin, 11);
+
+    // Subtitle
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(203, 213, 225);
+    doc.text(`Transportadora: ${carrier}   |   Mês de Referência: ${monthLabel}   |   Emitido em: ${new Date().toLocaleString("pt-BR")}`, textLeftMargin, 18);
+
+    // Compliance badge on top right
+    const complianceMap: Record<string, string> = {
+      draft: "Status: Em Rascunho",
+      reviewed: "Status: Em Revisão Compliance",
+      approved: "Status: Aprovado Compliance",
+    };
+    const compLabel = complianceMap[swotItem.complianceStatus || "draft"] || "Status: Em Rascunho";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setFillColor(51, 65, 85);
+    doc.roundedRect(pageWidth - 75, 6, 61, 14, 2, 2, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.text(compLabel, pageWidth - 44.5, 15, { align: "center" });
+
+    // Grid Dimensions
+    const marginX = 14;
+    const topY = 32;
+    const colGap = 8;
+    const rowGap = 7;
+    const boxWidth = (pageWidth - marginX * 2 - colGap) / 2; // ~130.5mm
+    const boxHeight = (pageHeight - topY - 14 - rowGap) / 2; // ~78mm
+    const headerHeight = 9;
+
+    const quadrants = [
+      {
+        title: "FORÇAS (STRENGTHS)",
+        color: [106, 168, 79], // Green
+        x: marginX,
+        y: topY,
+        text: swotItem.forces,
+      },
+      {
+        title: "FRAQUEZAS (WEAKNESSES)",
+        color: [224, 102, 102], // Red/Rose
+        x: marginX + boxWidth + colGap,
+        y: topY,
+        text: swotItem.fraquezas,
+      },
+      {
+        title: "OPORTUNIDADES (OPPORTUNITIES)",
+        color: [133, 179, 71], // Lime
+        x: marginX,
+        y: topY + boxHeight + rowGap,
+        text: swotItem.oportunidades,
+      },
+      {
+        title: "AMEAÇAS (THREATS)",
+        color: [224, 102, 102], // Coral Red
+        x: marginX + boxWidth + colGap,
+        y: topY + boxHeight + rowGap,
+        text: swotItem.ameacas,
+      },
+    ];
+
+    quadrants.forEach((q) => {
+      // Background Box
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(q.x, q.y, boxWidth, boxHeight, 3, 3, "FD");
+
+      // Header Fill
+      doc.setFillColor(q.color[0], q.color[1], q.color[2]);
+      doc.roundedRect(q.x, q.y, boxWidth, headerHeight, 3, 3, "F");
+      // Square off bottom corners of header
+      doc.rect(q.x, q.y + headerHeight - 2, boxWidth, 2, "F");
+
+      // Header Text
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(q.title, q.x + 4, q.y + 6.2);
+
+      // Body Text
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+
+      const content = (q.text && q.text.trim().length > 0)
+        ? q.text.trim()
+        : "(Nenhum ponto registrado para este quadrante)";
+
+      const lines = doc.splitTextToSize(content, boxWidth - 8);
+      const maxLines = Math.floor((boxHeight - headerHeight - 6) / 4.2);
+      const visibleLines = lines.slice(0, maxLines);
+      if (lines.length > maxLines) {
+        visibleLines[maxLines - 1] = visibleLines[maxLines - 1] + "... [continua]";
+      }
+
+      let lineY = q.y + headerHeight + 5;
+      visibleLines.forEach((line: string) => {
+        doc.text(line, q.x + 4, lineY);
+        lineY += 4.2;
+      });
+    });
+
+    // Footer
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("KD Monitor • Documento oficial para auditoria de desempenho e governança de transportes • Confidencial", marginX, pageHeight - 5);
+
+    const fileName = `SWOT_${carrier}_${monthKey}.pdf`;
+    doc.save(fileName);
+    showToast(`Relatório SWOT de ${carrier} exportado em PDF com sucesso!`, "success");
+  } catch (err) {
+    console.error("Erro ao gerar PDF da análise SWOT:", err);
+    showToast("Erro ao gerar PDF da análise SWOT.", "error");
+  }
 }
 
 function showBacklogContainersModal(dateKey: string, carrier: string, rows: any[], isWeekly: boolean = false) {
